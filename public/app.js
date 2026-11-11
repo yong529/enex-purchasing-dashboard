@@ -17,12 +17,12 @@ let calViewDate = new Date(today.getFullYear(), today.getMonth(), 1);
 
 // Color Themes Map
 const COLOR_THEMES = {
-  indigo: { bg: 'bg-indigo-50', border: 'border-indigo-200', text: 'text-indigo-700', badge: 'bg-indigo-100', pill: 'bg-indigo-50 text-indigo-700 border-indigo-200' },
-  amber: { bg: 'bg-amber-50', border: 'border-amber-200', text: 'text-amber-700', badge: 'bg-amber-100', pill: 'bg-amber-50 text-amber-700 border-amber-200' },
-  blue: { bg: 'bg-blue-50', border: 'border-blue-200', text: 'text-blue-700', badge: 'bg-blue-100', pill: 'bg-blue-50 text-blue-700 border-blue-200' },
-  purple: { bg: 'bg-purple-50', border: 'border-purple-200', text: 'text-purple-700', badge: 'bg-purple-100', pill: 'bg-purple-50 text-purple-700 border-purple-200' },
-  emerald: { bg: 'bg-emerald-50', border: 'border-emerald-200', text: 'text-emerald-700', badge: 'bg-emerald-100', pill: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
-  rose: { bg: 'bg-rose-50', border: 'border-rose-200', text: 'text-rose-700', badge: 'bg-rose-100', pill: 'bg-rose-50 text-rose-700 border-rose-200' }
+  indigo: { bg: 'bg-indigo-50', border: 'border-indigo-200', text: 'text-indigo-700', badge: 'bg-indigo-100 text-indigo-700', pill: 'bg-indigo-50 text-indigo-700 border-indigo-200' },
+  amber: { bg: 'bg-amber-50', border: 'border-amber-200', text: 'text-amber-700', badge: 'bg-amber-100 text-amber-800', pill: 'bg-amber-50 text-amber-700 border-amber-200' },
+  blue: { bg: 'bg-blue-50', border: 'border-blue-200', text: 'text-blue-700', badge: 'bg-blue-100 text-blue-700', pill: 'bg-blue-50 text-blue-700 border-blue-200' },
+  purple: { bg: 'bg-purple-50', border: 'border-purple-200', text: 'text-purple-700', badge: 'bg-purple-100 text-purple-700', pill: 'bg-purple-50 text-purple-700 border-purple-200' },
+  emerald: { bg: 'bg-emerald-50', border: 'border-emerald-200', text: 'text-emerald-700', badge: 'bg-emerald-100 text-emerald-800', pill: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  rose: { bg: 'bg-rose-50', border: 'border-rose-200', text: 'text-rose-700', badge: 'bg-rose-100 text-rose-700', pill: 'bg-rose-50 text-rose-700 border-rose-200' }
 };
 
 function formatDate(d) {
@@ -31,6 +31,34 @@ function formatDate(d) {
   const day = String(d.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
 }
+
+// Default Seed Data (used when local/cloud database is initially empty)
+const DEFAULT_MEMBERS = [
+  { id: "member-1", username: "kim", password: "1234", name: "김차장", title: "차장", role: "원자재 총괄 (PB · MDF 원판 수급 및 단가계약)", icon: "👔", color: "indigo", order_num: 1 },
+  { id: "member-2", username: "lee", password: "1234", name: "이과장", title: "과장", role: "하드웨어 (힌지 · 레일 · 서랍재 단가협상)", icon: "🔩", color: "amber", order_num: 2 },
+  { id: "member-3", username: "park", password: "1234", name: "박대리", title: "대리", role: "빌트인 가전 · 기기 (후드 · 쿡탑 · 싱크볼 OEM)", icon: "🍳", color: "blue", order_num: 3 },
+  { id: "member-4", username: "choi", password: "1234", name: "최대리", title: "대리", role: "외주가공 · 포장물류 (도어 UV도장 · 완충재)", icon: "📦", color: "purple", order_num: 4 },
+  { id: "member-5", username: "jung", password: "1234", name: "정주임", title: "주임", role: "ERP 전표 · 마감정산 (세금계산서 대조 및 정산)", icon: "📑", color: "emerald", order_num: 5 }
+];
+
+const DEFAULT_TASKS = [
+  { id: "task-1", member_id: "member-1", title: "한솔홈데코 18T PB 원판 4분기 공급단가 재계약 품의", deadline: formatDate(new Date(Date.now() + 3 * 86400000)), priority: "urgent", memo: "전분기 대비 3.2% 인상 요구 건 방어 협상안 포함", is_completed: false, created_at: new Date().toISOString() },
+  { id: "task-2", member_id: "member-1", title: "2027년도 주방가구 원자재 수급 계획안 본부장 보고", deadline: formatDate(new Date(Date.now() + 7 * 86400000)), priority: "normal", memo: "아산 1공장 생산 케파 증설 계획안 반영", is_completed: false, created_at: new Date().toISOString() },
+  { id: "task-3", member_id: "member-2", title: "헤펠레 댐핑 힌지 독일 선적 지연 확인 및 대체품 발주", deadline: formatDate(new Date(Date.now() + 1 * 86400000)), priority: "urgent", memo: "문성하드웨어 국내 재고 1,500set 긴급 차입 발주", is_completed: false, created_at: new Date().toISOString() },
+  { id: "task-4", member_id: "member-2", title: "블룸 서랍 레일 시스템 신제품 단가 비교표 작성", deadline: formatDate(new Date(Date.now() + 5 * 86400000)), priority: "normal", memo: "에넥스 프리미엄 키친 라인업 적용 검토", is_completed: false, created_at: new Date().toISOString() },
+  { id: "task-5", member_id: "member-3", title: "하츠 침니후드 4분기 정기 발주서 발행 (420대)", deadline: formatDate(new Date(Date.now() + 2 * 86400000)), priority: "urgent", memo: "생산일정 맞춰 아산공장 직송 요청", is_completed: false, created_at: new Date().toISOString() },
+  { id: "task-6", member_id: "member-3", title: "SK매직 3구 인덕션 안성물류센터 입고 검수 일정 조율", deadline: formatDate(new Date(Date.now() + 4 * 86400000)), priority: "normal", memo: "불량률 0% 확인 및 ERP 전표 처리 예정", is_completed: false, created_at: new Date().toISOString() },
+  { id: "task-7", member_id: "member-4", title: "아산공장 완충재 및 파렛트 11월분 정기 발주", deadline: formatDate(new Date(Date.now() + 1 * 86400000)), priority: "normal", memo: "월말 성수기 대비 20% 추가 확보", is_completed: false, created_at: new Date().toISOString() },
+  { id: "task-8", member_id: "member-4", title: "우진목재 도어 UV도장 외주가공 단가 인상 요청 건 실사", deadline: formatDate(new Date(Date.now() + 6 * 86400000)), priority: "urgent", memo: "페인트 원자재 인상분 근거 서류 현장 대조", is_completed: false, created_at: new Date().toISOString() },
+  { id: "task-9", member_id: "member-5", title: "10월 마감 협력사 세금계산서 대조 및 전표 회계팀 이관", deadline: formatDate(today), priority: "urgent", memo: "오늘 18:00 마감 전표 최종 확인 필요", is_completed: false, created_at: new Date().toISOString() },
+  { id: "task-10", member_id: "member-5", title: "신규 거래처(대성목재) ERP 등록 및 서류 취합", deadline: formatDate(new Date(Date.now() + 3 * 86400000)), priority: "normal", memo: "사업자등록증, 통장사본 승인 완료 후 코드 발급", is_completed: false, created_at: new Date().toISOString() }
+];
+
+const DEFAULT_DIRECTIVES = [
+  { id: "dir-1", issuer_id: "member-1", target_id: "member-2", title: "헤펠레 댐핑 힌지 선적 지연 대체 수배 결과 즉시 보고", content: "아산 키친 라인 멈추지 않도록 문성하드웨어 재고 1,500세트 내일 오전 중 입고 확약서 수령 후 보고할 것.", priority: "urgent", status: "pending", created_at: new Date(Date.now() - 3600000).toISOString() },
+  { id: "dir-2", issuer_id: "member-1", target_id: "all", title: "4분기 협력사 공급단가 인상 요청 건 일체 임의 수용 금지", content: "원가분석표 사전 검토 없이 구두 합의 절대 불가. 원가 상승분 세부 증빙 서류 필수 징구하여 팀장 결재 득할 것.", priority: "urgent", status: "completed", created_at: new Date(Date.now() - 86400000).toISOString() },
+  { id: "dir-3", issuer_id: "member-1", target_id: "member-5", title: "10월 마감 협력사 단가 차액 전표 17:00까지 수정 이관", content: "한솔홈데코 단가 차액 발생 건 계산서 수정 발행 요청 완료되었는지 확인 후 결과 회신 요망.", priority: "urgent", status: "pending", created_at: new Date(Date.now() - 7200000).toISOString() }
+];
 
 // ==================== SUPABASE INITIALIZATION ====================
 
@@ -116,10 +144,10 @@ async function fetchInitialData() {
   // 1. Try Supabase first if configured
   if (initSupabase()) {
     const ok = await fetchSupabaseData();
-    if (ok) return;
+    if (ok && members.length > 0) return;
   }
 
-  // 2. Try Local REST API
+  // 2. Try Local REST API (if running with node server.js locally)
   try {
     const [mRes, tRes, dRes] = await Promise.all([
       fetch('/api/members'),
@@ -128,17 +156,22 @@ async function fetchInitialData() {
     ]);
 
     if (mRes.ok && tRes.ok) {
-      members = await mRes.json();
-      tasks = await tRes.json();
-      directives = dRes.ok ? await dRes.json() : [];
-      renderAll();
-      return;
+      const mData = await mRes.json();
+      const tData = await tRes.json();
+      const dData = dRes.ok ? await dRes.json() : [];
+      if (Array.isArray(mData) && mData.length > 0) {
+        members = mData;
+        tasks = Array.isArray(tData) ? tData : [];
+        directives = Array.isArray(dData) ? dData : [];
+        renderAll();
+        return;
+      }
     }
   } catch (err) {
-    console.log('Local API unavailable, checking local storage fallback');
+    console.log('Local API unavailable, falling back to local storage');
   }
 
-  // 3. Fallback Local Storage
+  // 3. Fallback Local Storage & Default Seeds
   loadLocalState();
   renderAll();
 }
@@ -167,12 +200,34 @@ function loadLocalState() {
     const saved = localStorage.getItem('enex_dashboard_v3_state');
     if (saved) {
       const parsed = JSON.parse(saved);
-      members = parsed.members || [];
-      tasks = parsed.tasks || [];
-      directives = parsed.directives || [];
-      return;
+      if (Array.isArray(parsed.members) && parsed.members.length > 0) {
+        members = parsed.members;
+        tasks = parsed.tasks || [];
+        directives = parsed.directives || [];
+
+        // Ensure usernames and passwords exist for default members
+        members.forEach(m => {
+          if (!m.username) {
+            const def = DEFAULT_MEMBERS.find(d => d.id === m.id);
+            if (def) {
+              m.username = def.username;
+              m.password = def.password;
+            } else {
+              m.username = m.id.replace('member-', 'user');
+              m.password = '1234';
+            }
+          }
+        });
+        return;
+      }
     }
   } catch (e) {}
+
+  // Defaults if nothing in storage
+  members = JSON.parse(JSON.stringify(DEFAULT_MEMBERS));
+  tasks = JSON.parse(JSON.stringify(DEFAULT_TASKS));
+  directives = JSON.parse(JSON.stringify(DEFAULT_DIRECTIVES));
+  saveLocalState();
 }
 
 function saveLocalState() {
@@ -212,6 +267,12 @@ function changeCurrentUser(newId) {
 function renderMyActionSection() {
   const curMember = members.find(m => m.id === currentUserId) || { name: '사용자', title: '담당자', icon: '👤', color: 'blue' };
   const todayStr = formatDate(today);
+
+  // Update Top Global Header User Badge
+  const headerAvatar = document.getElementById('header-user-avatar');
+  const headerName = document.getElementById('header-user-name');
+  if (headerAvatar) headerAvatar.textContent = curMember.icon || '👤';
+  if (headerName) headerName.textContent = `${curMember.name} (${curMember.title})`;
 
   document.getElementById('my-profile-greeting').textContent = `환영합니다, ${curMember.name} ${curMember.title}님!`;
   document.getElementById('my-profile-avatar').textContent = curMember.icon || '👤';
@@ -893,6 +954,204 @@ async function handleSaveMember(e) {
   renderMyActionSection();
   renderMembersAccordion();
   renderCalendar();
+}
+
+// ==================== LOGIN & ACCOUNT SWITCHING ====================
+
+function openLoginModal() {
+  renderLoginAccountsList();
+  document.getElementById('login-modal').classList.remove('hidden');
+}
+
+function closeLoginModal() {
+  document.getElementById('login-modal').classList.add('hidden');
+  const form = document.getElementById('direct-login-form');
+  if (form) form.reset();
+}
+
+function renderLoginAccountsList() {
+  const list = document.getElementById('login-accounts-list');
+  if (!list) return;
+  list.innerHTML = '';
+
+  members.forEach(m => {
+    const isCurrent = m.id === currentUserId;
+    const theme = COLOR_THEMES[m.color] || COLOR_THEMES.blue;
+
+    const btn = document.createElement('div');
+    btn.className = `p-2.5 rounded-xl border flex items-center justify-between cursor-pointer transition select-none ${
+      isCurrent 
+        ? 'bg-blue-50/80 border-blue-400 ring-2 ring-blue-500/20 shadow-xs' 
+        : 'bg-white border-slate-200/80 hover:bg-slate-50 hover:border-slate-300'
+    }`;
+    btn.onclick = () => {
+      changeCurrentUser(m.id);
+      closeLoginModal();
+    };
+
+    btn.innerHTML = `
+      <div class="flex items-center gap-2.5 min-w-0">
+        <div class="w-9 h-9 rounded-xl ${theme.bg} ${theme.border} border flex items-center justify-center text-xl shrink-0 shadow-xs">
+          ${m.icon || '👤'}
+        </div>
+        <div class="min-w-0 text-left">
+          <div class="flex items-center gap-1.5 flex-wrap">
+            <span class="font-extrabold text-slate-900 text-xs">${m.name}</span>
+            <span class="text-[10px] px-1.5 py-0.2 rounded-full font-semibold ${theme.badge}">
+              ${m.title}
+            </span>
+            <span class="text-[10px] text-slate-400 font-mono">(@${m.username || m.id.replace('member-', 'user')})</span>
+          </div>
+          <p class="text-[11px] text-slate-500 truncate mt-0.5" title="${m.role}">
+            ${m.role}
+          </p>
+        </div>
+      </div>
+      <div class="shrink-0 ml-2">
+        ${isCurrent 
+          ? '<span class="text-[10px] font-bold text-blue-700 bg-white border border-blue-300 px-2.5 py-1 rounded-lg shadow-2xs">현재 접속중</span>' 
+          : '<span class="text-[10px] text-slate-600 bg-slate-100 hover:bg-blue-600 hover:text-white px-2.5 py-1 rounded-lg font-semibold transition">접속하기</span>'
+        }
+      </div>
+    `;
+
+    list.appendChild(btn);
+  });
+}
+
+function handleDirectLogin(e) {
+  e.preventDefault();
+  const usernameInput = document.getElementById('login-username-input').value.trim().toLowerCase();
+  const passwordInput = document.getElementById('login-password-input').value.trim();
+
+  const target = members.find(m => 
+    (m.username && m.username.toLowerCase() === usernameInput) || 
+    (m.id && m.id.toLowerCase() === usernameInput) ||
+    (m.name && m.name.toLowerCase() === usernameInput)
+  );
+
+  if (!target) {
+    alert(`'${usernameInput}' 아이디에 해당하는 직원을 찾을 수 없습니다.\n빠른 계정 선택 목록을 확인해 주세요.`);
+    return;
+  }
+
+  if (target.password && target.password !== passwordInput) {
+    alert('비밀번호가 일치하지 않습니다. (기본 비밀번호: 1234)');
+    return;
+  }
+
+  changeCurrentUser(target.id);
+  closeLoginModal();
+}
+
+// ==================== REGISTER NEW MEMBER (AUTO ORG-CHART ADDITION) ====================
+
+function openRegisterModal() {
+  document.getElementById('register-modal').classList.remove('hidden');
+}
+
+function closeRegisterModal() {
+  document.getElementById('register-modal').classList.add('hidden');
+  const form = document.getElementById('register-form');
+  if (form) form.reset();
+}
+
+function setRegIcon(icon) {
+  const el = document.getElementById('reg-icon');
+  if (el) el.value = icon;
+}
+
+async function handleRegisterUser(e) {
+  e.preventDefault();
+  const name = document.getElementById('reg-name').value.trim();
+  const title = document.getElementById('reg-title').value.trim();
+  const role = document.getElementById('reg-role').value.trim();
+  const username = document.getElementById('reg-username').value.trim();
+  const password = document.getElementById('reg-password').value.trim() || '1234';
+  const icon = document.getElementById('reg-icon').value.trim() || '🧑‍💼';
+  const color = document.getElementById('reg-color').value || 'blue';
+
+  // Check if username already exists
+  if (members.some(m => m.username && m.username.toLowerCase() === username.toLowerCase())) {
+    alert(`이미 등록된 로그인 아이디입니다: ${username}\n다른 아이디를 지정해 주세요.`);
+    return;
+  }
+
+  const newId = `member-${Date.now()}`;
+  const newMember = {
+    id: newId,
+    username,
+    password,
+    name,
+    title,
+    role,
+    icon,
+    color,
+    order_num: members.length + 1,
+    created_at: new Date().toISOString()
+  };
+
+  // 1. Add to local members array
+  members.push(newMember);
+  expandedMemberIds.add(newId);
+
+  // 2. Generate initial onboarding welcome task for this newly registered member
+  const welcomeTask = {
+    id: `task-${Date.now()}`,
+    member_id: newId,
+    title: `${name} ${title} 신규 업무 인수인계 및 부서 관제 시스템 등록`,
+    deadline: formatDate(today),
+    priority: 'urgent',
+    memo: '구매본부 자재 ERP 접속 권한 승인 및 담당 품목 단가표 숙지',
+    is_completed: false,
+    created_at: new Date().toISOString()
+  };
+  tasks.unshift(welcomeTask);
+
+  // 3. Supabase Cloud Sync
+  if (supabaseClient) {
+    try {
+      await supabaseClient.from('members').insert([newMember]);
+      await supabaseClient.from('tasks').insert([welcomeTask]);
+      console.log('⚡ Supabase member & task inserted:', newMember);
+    } catch (err) {
+      console.warn('Supabase member insert failed:', err);
+    }
+  } else {
+    // Local server API
+    try {
+      await fetch('/api/members', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newMember)
+      });
+      await fetch('/api/tasks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(welcomeTask)
+      });
+    } catch (e) {}
+  }
+
+  // 4. Save to Local Storage
+  saveLocalState();
+
+  // 5. Switch logged-in user to this new member
+  currentUserId = newId;
+  localStorage.setItem('enex_current_user_id', newId);
+
+  // 6. Close Modal & Re-render all views
+  closeRegisterModal();
+  renderAll();
+
+  // 7. Notification & scroll into view
+  alert(`🎉 [${name} ${title}] 님의 계정이 생성되어 구매부 조직도에 자동 추가되었습니다!\n현재 [${name}] 계정으로 즉시 로그인되었습니다.`);
+  setTimeout(() => {
+    const cardEl = document.getElementById(`member-card-${newId}`);
+    if (cardEl) {
+      cardEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, 200);
 }
 
 // ==================== SECTION 3: BOTTOM CALENDAR ====================

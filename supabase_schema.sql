@@ -6,6 +6,8 @@
 -- 1. 조직원 테이블 (members)
 CREATE TABLE IF NOT EXISTS public.members (
     id TEXT PRIMARY KEY,
+    username TEXT,
+    password TEXT DEFAULT '1234',
     name TEXT NOT NULL,
     title TEXT NOT NULL,
     role TEXT NOT NULL,
@@ -14,6 +16,10 @@ CREATE TABLE IF NOT EXISTS public.members (
     order_num INTEGER DEFAULT 1,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
+
+-- 기존 테이블이 이미 생성되어 있을 경우를 대비한 컬럼 추가
+ALTER TABLE public.members ADD COLUMN IF NOT EXISTS username TEXT;
+ALTER TABLE public.members ADD COLUMN IF NOT EXISTS password TEXT DEFAULT '1234';
 
 -- 2. 할 일 & 마감일 테이블 (tasks)
 CREATE TABLE IF NOT EXISTS public.tasks (
@@ -54,13 +60,13 @@ CREATE POLICY "Allow public read/write tasks" ON public.tasks FOR ALL USING (tru
 CREATE POLICY "Allow public read/write directives" ON public.directives FOR ALL USING (true) WITH CHECK (true);
 
 -- 6. 초기 샘플 데이터 입력 (Seed Data)
-INSERT INTO public.members (id, name, title, role, icon, color, order_num) VALUES
-('member-1', '김차장', '차장', '원자재 총괄 (PB · MDF 원판 수급 및 단가계약)', '👔', 'indigo', 1),
-('member-2', '이과장', '과장', '하드웨어 (힌지 · 레일 · 서랍재 단가협상)', '🔩', 'amber', 2),
-('member-3', '박대리', '대리', '빌트인 가전 · 기기 (후드 · 쿡탑 · 싱크볼 OEM)', '🍳', 'blue', 3),
-('member-4', '최대리', '대리', '외주가공 · 포장물류 (도어 UV도장 · 완충재)', '📦', 'purple', 4),
-('member-5', '정주임', '주임', 'ERP 전표 · 마감정산 (세금계산서 대조 및 정산)', '📑', 'emerald', 5)
-ON CONFLICT (id) DO NOTHING;
+INSERT INTO public.members (id, username, password, name, title, role, icon, color, order_num) VALUES
+('member-1', 'kim', '1234', '김차장', '차장', '원자재 총괄 (PB · MDF 원판 수급 및 단가계약)', '👔', 'indigo', 1),
+('member-2', 'lee', '1234', '이과장', '과장', '하드웨어 (힌지 · 레일 · 서랍재 단가협상)', '🔩', 'amber', 2),
+('member-3', 'park', '1234', '박대리', '대리', '빌트인 가전 · 기기 (후드 · 쿡탑 · 싱크볼 OEM)', '🍳', 'blue', 3),
+('member-4', 'choi', '1234', '최대리', '대리', '외주가공 · 포장물류 (도어 UV도장 · 완충재)', '📦', 'purple', 4),
+('member-5', 'jung', '1234', '정주임', '주임', 'ERP 전표 · 마감정산 (세금계산서 대조 및 정산)', '📑', 'emerald', 5)
+ON CONFLICT (id) DO UPDATE SET username = EXCLUDED.username, password = EXCLUDED.password;
 
 INSERT INTO public.tasks (id, member_id, title, deadline, priority, memo, is_completed) VALUES
 ('task-1', 'member-1', '한솔홈데코 18T PB 원판 4분기 공급단가 재계약 품의', CURRENT_DATE + INTERVAL '3 days', 'urgent', '전분기 대비 3.2% 인상 요구 건 방어 협상안 포함', false),

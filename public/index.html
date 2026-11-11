@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ENEX 구매부 관제 대시보드 (Localhost)</title>
+  <title>ENEX 구매부 관제 대시보드</title>
   <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
   <!-- Supabase JS Client for Cloud Realtime Sync -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -25,7 +25,7 @@
 
   <div class="max-w-6xl mx-auto space-y-6">
 
-    <!-- Top Global Header & Account Switcher -->
+    <!-- Top Global Header & Account Control -->
     <header class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-sm">
       <div class="flex items-center gap-3">
         <div class="w-11 h-11 rounded-xl bg-gradient-to-tr from-blue-700 to-blue-500 flex items-center justify-center text-white font-black text-xl shadow-sm">
@@ -36,23 +36,25 @@
             <h1 class="text-lg sm:text-xl font-black text-slate-900 tracking-tight">ENEX 구매부 관제 대시보드</h1>
             <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
               <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-              계정 연동 모드
+              클라우드 실시간 가동중
             </span>
           </div>
           <p class="text-xs text-slate-500 mt-0.5">상단 개인화 업무 관제 · 지시사항 하달 및 수신 · 조직도 드롭다운 & 캘린더</p>
         </div>
       </div>
 
-      <!-- Actions & Account Switcher -->
+      <!-- Actions & Account Info -->
       <div class="flex flex-wrap items-center gap-2">
-        <!-- Account Switcher Simulation -->
-        <div class="flex items-center gap-1.5 bg-slate-100/90 border border-slate-200 px-3 py-1.5 rounded-xl text-xs">
-          <span class="text-slate-400 font-medium">접속 계정:</span>
-          <select id="current-user-select" onchange="changeCurrentUser(this.value)" 
-            class="bg-transparent font-bold text-slate-800 cursor-pointer focus:outline-none">
-            <!-- Populated dynamically -->
-          </select>
-        </div>
+        <!-- Current Logged In Account Badge -->
+        <button onclick="openLoginModal()" class="flex items-center gap-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-xl text-xs transition">
+          <span id="header-user-avatar" class="text-base">👔</span>
+          <span id="header-user-name" class="font-bold text-slate-800">김차장 (차장)</span>
+          <span class="text-[10px] text-blue-600 font-semibold bg-blue-50 border border-blue-200 px-1.5 py-0.2 rounded">계정 전환</span>
+        </button>
+
+        <button onclick="openRegisterModal()" class="inline-flex items-center gap-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs px-3 py-2 rounded-xl transition">
+          + 팀원 계정 등록
+        </button>
 
         <button onclick="openDirectiveModal()" class="inline-flex items-center gap-1.5 bg-red-600 hover:bg-red-700 text-white font-bold text-xs px-3.5 py-2 rounded-xl shadow-sm transition active:scale-95">
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z"></path></svg>
@@ -61,7 +63,7 @@
 
         <button onclick="openSupabaseModal()" class="inline-flex items-center gap-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 font-semibold text-xs px-3 py-2 rounded-xl transition">
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
-          Supabase 배포 안내
+          Supabase 연동
         </button>
       </div>
     </header>
@@ -75,7 +77,7 @@
           </div>
           <div>
             <div class="flex items-center gap-2">
-              <span class="text-xs px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 font-semibold border border-blue-400/30">로그인 확인됨</span>
+              <span class="text-xs px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 font-semibold border border-blue-400/30">로그인 인증됨</span>
               <h2 class="text-base sm:text-lg font-black text-white tracking-tight" id="my-profile-greeting">
                 환영합니다, 김차장님!
               </h2>
@@ -90,6 +92,9 @@
           <span class="text-xs px-3 py-1.5 rounded-xl bg-white/10 text-slate-200 font-medium" id="my-alert-badges">
             확인할 것 <strong class="text-amber-400" id="my-pending-count">0</strong>건
           </span>
+          <button onclick="openLoginModal()" class="text-xs px-2.5 py-1.5 rounded-xl bg-white/15 hover:bg-white/25 text-white transition font-medium">
+            로그아웃
+          </button>
         </div>
       </div>
 
@@ -100,7 +105,7 @@
         <div class="bg-white/5 border border-white/10 rounded-2xl p-4 space-y-3">
           <div class="flex items-center justify-between">
             <h3 class="text-xs font-bold uppercase tracking-wider text-amber-300 flex items-center gap-1.5">
-              <span>🚨</span> 하달된 지시사항 (수신)
+              <span>🚨</span> 나에게 하달된 지시사항
             </h3>
             <span class="text-[11px] text-slate-400" id="my-directives-count">0건 대기</span>
           </div>
@@ -127,7 +132,7 @@
       </div>
     </section>
 
-    <!-- Section 1: 전체 지시사항 하달 이력 피드 (접기/펼치기 가능) -->
+    <!-- Section 1: 전체 지시사항 하달 이력 피드 -->
     <section class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
       <div onclick="toggleDirectivesFeed()" class="p-4 sm:p-4.5 flex items-center justify-between cursor-pointer hover:bg-slate-50/70 select-none transition">
         <div class="flex items-center gap-2.5">
@@ -138,7 +143,7 @@
           </div>
         </div>
         <div class="flex items-center gap-2">
-          <span class="text-xs font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-600" id="total-directives-badge">3건</span>
+          <span class="text-xs font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-600" id="total-directives-badge">0건</span>
           <div id="directives-feed-arrow" class="w-6 h-6 rounded flex items-center justify-center text-slate-400 transition transform">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
           </div>
@@ -157,14 +162,14 @@
           <h2 class="text-sm font-bold text-slate-800 flex items-center gap-1.5">
             <span>👥</span> 구매부 조직원 및 담당 업무
           </h2>
-          <span class="text-xs text-slate-400 font-normal hidden sm:inline">인원을 클릭하면 아래로 할 일 목록이 드롭다운으로 펼쳐집니다</span>
+          <span class="text-xs text-slate-400 font-normal hidden sm:inline">계정 생성 시 조직도에 자동 추가되며, 클릭 시 할 일 목록이 펼쳐집니다</span>
         </div>
         <div class="flex items-center gap-2">
           <button onclick="toggleAllAccordions()" id="btn-toggle-all" class="text-xs font-semibold px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 transition">
             전체 펼치기 / 접기
           </button>
-          <button onclick="openAddMemberModal()" class="text-xs font-semibold px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 transition">
-            + 담당자 추가
+          <button onclick="openRegisterModal()" class="text-xs font-semibold px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 transition">
+            + 팀원 계정 등록 (조직도 추가)
           </button>
         </div>
       </div>
@@ -175,7 +180,7 @@
       </div>
     </section>
 
-    <!-- Section 3: 하단 마감일 캘린더 (달력이 밑으로 이동) -->
+    <!-- Section 3: 하단 마감일 캘린더 -->
     <section class="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-4 sm:p-6 space-y-4">
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
         <div>
@@ -244,9 +249,157 @@
       </div>
     </section>
 
+    <!-- Footer -->
+    <footer class="bg-white border border-slate-200/80 rounded-2xl p-4 text-xs text-slate-500 flex flex-col md:flex-row md:items-center justify-between gap-2">
+      <div class="flex items-center gap-2">
+        <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+        <span>ENEX 구매본부 통합 업무 관제 시스템 • <strong class="text-slate-700">Netlify & Supabase Cloud 연동</strong></span>
+      </div>
+      <div class="text-[11px] text-slate-400">
+        24시간 실시간 무중단 서비스
+      </div>
+    </footer>
+
   </div>
 
-  <!-- Modal 1: 지시사항 하달 모달 (Directive Modal) -->
+  <!-- Modal 0: 로그인 / 계정 선택 모달 (Login Modal) -->
+  <div id="login-modal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100 space-y-4">
+      <div class="flex items-center justify-between pb-2 border-b border-slate-100">
+        <div>
+          <h3 class="text-base font-bold text-slate-900">ENEX 구매부 임직원 로그인</h3>
+          <p class="text-xs text-slate-500 mt-0.5">접속하실 본인 계정을 선택하거나 아이디로 로그인하세요.</p>
+        </div>
+        <button onclick="closeLoginModal()" class="text-slate-400 hover:text-slate-600">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+        </button>
+      </div>
+
+      <!-- Quick 1-Click Select List -->
+      <div class="space-y-2">
+        <div class="flex items-center justify-between">
+          <label class="block font-bold text-slate-700 text-xs">⚡ 원클릭 빠른 계정 전환</label>
+          <span class="text-[11px] text-slate-400">클릭 즉시 접속</span>
+        </div>
+        <div class="grid grid-cols-1 gap-1.5 max-h-56 overflow-y-auto pr-1 custom-scroll" id="login-accounts-list">
+          <!-- Populated dynamically -->
+        </div>
+      </div>
+
+      <!-- Direct ID & Password Login Form -->
+      <div class="pt-3 border-t border-slate-100 space-y-2">
+        <label class="block font-bold text-slate-700 text-xs">🔑 아이디 / 비밀번호 로그인</label>
+        <form id="direct-login-form" onsubmit="handleDirectLogin(event)" class="space-y-2 text-xs">
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <input type="text" id="login-username-input" placeholder="아이디 (예: kim)" required
+                class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none">
+            </div>
+            <div>
+              <input type="password" id="login-password-input" placeholder="비밀번호 (기본: 1234)" required
+                class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none">
+            </div>
+          </div>
+          <button type="submit" class="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-2 rounded-xl transition text-xs shadow-xs">
+            로그인하기
+          </button>
+        </form>
+      </div>
+
+      <div class="pt-2 border-t border-slate-100 flex items-center justify-between">
+        <button onclick="closeLoginModal(); openRegisterModal();" class="text-xs font-bold text-blue-600 hover:text-blue-800">
+          + 새 팀원 계정 등록 (조직도 자동 추가)
+        </button>
+        <button onclick="closeLoginModal()" class="px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-100 font-semibold text-xs transition">
+          닫기
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 1: 새 팀원 계정 등록 (회원가입 & 조직도 자동 추가) 모달 -->
+  <div id="register-modal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100 space-y-4">
+      <div class="flex items-center justify-between pb-2 border-b border-slate-100">
+        <div>
+          <h3 class="text-base font-bold text-slate-900">새 팀원 계정 등록</h3>
+          <p class="text-xs text-slate-500 mt-0.5">계정 생성 시 조직도에 자동으로 인원이 추가됩니다.</p>
+        </div>
+        <button onclick="closeRegisterModal()" class="text-slate-400 hover:text-slate-600">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+        </button>
+      </div>
+
+      <form id="register-form" onsubmit="handleRegisterUser(event)" class="space-y-3.5 text-xs">
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">성명</label>
+            <input type="text" id="reg-name" required placeholder="예: 강대리, 홍길동" 
+              class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none">
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">직급</label>
+            <input type="text" id="reg-title" required placeholder="예: 대리, 주임, 차장" 
+              class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none">
+          </div>
+        </div>
+
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1">담당 업무 및 역할 (상세)</label>
+          <textarea id="reg-role" rows="2" required placeholder="예: 키친 상판 인조대리석 수급 및 단가계약" 
+            class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none"></textarea>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">로그인 아이디</label>
+            <input type="text" id="reg-username" required placeholder="예: kang, user1" 
+              class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none">
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">비밀번호 (기본: 1234)</label>
+            <input type="password" id="reg-password" required value="1234" 
+              class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">아바타 아이콘</label>
+            <div class="flex items-center gap-2">
+              <input type="text" id="reg-icon" required value="🧑‍💼" maxlength="4" class="w-12 text-center text-lg bg-slate-50 border border-slate-200 rounded-xl px-2 py-1.5">
+              <div class="flex gap-1 text-base overflow-x-auto py-1">
+                <span onclick="setRegIcon('👔')" class="cursor-pointer hover:scale-125 transition">👔</span>
+                <span onclick="setRegIcon('🔩')" class="cursor-pointer hover:scale-125 transition">🔩</span>
+                <span onclick="setRegIcon('🍳')" class="cursor-pointer hover:scale-125 transition">🍳</span>
+                <span onclick="setRegIcon('📦')" class="cursor-pointer hover:scale-125 transition">📦</span>
+                <span onclick="setRegIcon('📑')" class="cursor-pointer hover:scale-125 transition">📑</span>
+                <span onclick="setRegIcon('🧑‍💼')" class="cursor-pointer hover:scale-125 transition">🧑‍💼</span>
+              </div>
+            </div>
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">테마 색상</label>
+            <select id="reg-color" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+              <option value="indigo">인디고 (네이비)</option>
+              <option value="amber">앰버 (오렌지)</option>
+              <option value="blue" selected>블루 (파랑)</option>
+              <option value="purple">퍼플 (보라)</option>
+              <option value="emerald">에메랄드 (초록)</option>
+              <option value="rose">로즈 (빨강)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="pt-3 flex items-center justify-end gap-2 border-t border-slate-100">
+          <button type="button" onclick="closeRegisterModal()" class="px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-100 font-semibold transition">취소</button>
+          <button type="submit" class="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold shadow-sm transition">계정 생성 및 로그인</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal 2: 지시사항 하달 모달 (Directive Modal) -->
   <div id="directive-modal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
     <div class="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-100 space-y-4">
       <div class="flex items-center justify-between pb-2 border-b border-slate-100">
@@ -269,7 +422,6 @@
             <label class="block font-semibold text-slate-700 mb-1">수신 대상 (담당자)</label>
             <select id="directive-target-select" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none">
               <option value="all">전체 공지 (구매부 전원)</option>
-              <!-- Populated dynamically -->
             </select>
           </div>
         </div>
@@ -303,7 +455,7 @@
     </div>
   </div>
 
-  <!-- Modal 2: Edit Member Modal -->
+  <!-- Modal 3: Edit Member Modal -->
   <div id="edit-member-modal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
     <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100 space-y-4">
       <div class="flex items-center justify-between pb-2 border-b border-slate-100">
@@ -317,44 +469,28 @@
 
       <form id="edit-member-form" onsubmit="handleSaveMember(event)" class="space-y-3.5 text-xs">
         <input type="hidden" id="edit-member-id">
-
         <div class="grid grid-cols-2 gap-3">
           <div>
             <label class="block font-semibold text-slate-700 mb-1">직급</label>
-            <input type="text" id="edit-member-title" required placeholder="예: 차장, 과장, 대리" 
-              class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none">
+            <input type="text" id="edit-member-title" required class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 font-medium">
           </div>
           <div>
-            <label class="block font-semibold text-slate-700 mb-1">성명 / 호칭</label>
-            <input type="text" id="edit-member-name" required placeholder="예: 김차장, 홍길동" 
-              class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none">
+            <label class="block font-semibold text-slate-700 mb-1">성명</label>
+            <input type="text" id="edit-member-name" required class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 font-medium">
           </div>
         </div>
-
         <div>
-          <label class="block font-semibold text-slate-700 mb-1">담당 업무 및 역할 (상세)</label>
-          <textarea id="edit-member-role" rows="2" required placeholder="예: 원자재 총괄 (PB · MDF 원판 수급 및 단가계약)" 
-            class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none"></textarea>
+          <label class="block font-semibold text-slate-700 mb-1">담당 업무 및 역할</label>
+          <textarea id="edit-member-role" rows="2" required class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800"></textarea>
         </div>
-
         <div class="grid grid-cols-2 gap-3">
           <div>
             <label class="block font-semibold text-slate-700 mb-1">아이콘 (이모지)</label>
-            <div class="flex items-center gap-2">
-              <input type="text" id="edit-member-icon" required maxlength="4" class="w-14 text-center text-lg bg-slate-50 border border-slate-200 rounded-xl px-2 py-1.5">
-              <div class="flex gap-1 text-base overflow-x-auto py-1">
-                <span onclick="setEditIcon('👔')" class="cursor-pointer hover:scale-125 transition">👔</span>
-                <span onclick="setEditIcon('🔩')" class="cursor-pointer hover:scale-125 transition">🔩</span>
-                <span onclick="setEditIcon('🍳')" class="cursor-pointer hover:scale-125 transition">🍳</span>
-                <span onclick="setEditIcon('📦')" class="cursor-pointer hover:scale-125 transition">📦</span>
-                <span onclick="setEditIcon('📑')" class="cursor-pointer hover:scale-125 transition">📑</span>
-                <span onclick="setEditIcon('📊')" class="cursor-pointer hover:scale-125 transition">📊</span>
-              </div>
-            </div>
+            <input type="text" id="edit-member-icon" required maxlength="4" class="w-14 text-center text-lg bg-slate-50 border border-slate-200 rounded-xl px-2 py-1.5">
           </div>
           <div>
             <label class="block font-semibold text-slate-700 mb-1">테마 색상</label>
-            <select id="edit-member-color" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+            <select id="edit-member-color" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800">
               <option value="indigo">인디고 (네이비)</option>
               <option value="amber">앰버 (오렌지)</option>
               <option value="blue">블루 (파랑)</option>
@@ -364,21 +500,20 @@
             </select>
           </div>
         </div>
-
         <div class="pt-3 flex items-center justify-end gap-2 border-t border-slate-100">
-          <button type="button" onclick="closeEditMemberModal()" class="px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-100 font-semibold transition">취소</button>
-          <button type="submit" class="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold shadow-sm transition">저장하기</button>
+          <button type="button" onclick="closeEditMemberModal()" class="px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-100 font-semibold">취소</button>
+          <button type="submit" class="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold">저장하기</button>
         </div>
       </form>
     </div>
   </div>
 
-  <!-- Modal 3: Supabase Deployment Guide Modal -->
+  <!-- Modal 4: Supabase Deployment Guide Modal -->
   <div id="supabase-modal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
     <div class="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-100 space-y-4">
       <div class="flex items-center justify-between pb-2 border-b border-slate-100">
         <h3 class="text-base font-bold text-slate-900 flex items-center gap-2">
-          <span>⚡</span> Supabase 백엔드 & 인증(Auth) 배포 가이드
+          <span>⚡</span> Supabase 실시간 클라우드 DB 연동
         </h3>
         <button onclick="closeSupabaseModal()" class="text-slate-400 hover:text-slate-600">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
@@ -387,29 +522,22 @@
 
       <div class="text-xs text-slate-600 space-y-3 leading-relaxed">
         <p>
-          나중에 Supabase로 배포하시면 현재 우측 상단의 <strong>[접속 계정 선택]</strong> 대신 실제 <strong>이메일 로그인(Google 로그인 / 회사 계정)</strong>을 통해 각 직원의 세션이 인증됩니다.
+          Supabase 프로젝트 정보를 입력하시면 브라우저를 새로고침해도 전 직원의 데이터가 실시간으로 동기화됩니다.
         </p>
-
-        <div class="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-1.5 font-mono text-[11px]">
-          <div class="font-bold text-slate-800">1. Supabase 프로젝트 생성</div>
-          <p class="text-slate-500">supabase.com에서 무료 프로젝트 생성 후 [SQL Editor]에 <strong>supabase_schema.sql</strong> 내용 붙여넣고 Run</p>
-          <div class="font-bold text-slate-800 pt-2">2. Supabase API 키 연결 (Netlify 배포 시 입력)</div>
-          <p class="text-slate-500">아래에 본인 Supabase Project URL과 Anon Key를 입력하시면 즉시 클라우드 실시간 동기화로 전환됩니다.</p>
-        </div>
 
         <div class="bg-blue-50/60 p-3 rounded-xl border border-blue-200 space-y-2">
           <div>
             <label class="block font-bold text-slate-800 text-[11px] mb-1">Supabase Project URL</label>
-            <input type="text" id="supabase-url-input" placeholder="https://your-project.supabase.co" 
+            <input type="text" id="supabase-url-input" placeholder="https://lnilzitmifivbhauepac.supabase.co" 
               class="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-800 font-mono text-xs focus:ring-2 focus:ring-blue-500">
           </div>
           <div>
-            <label class="block font-bold text-slate-800 text-[11px] mb-1">Supabase Anon Key (Public API Key)</label>
-            <input type="password" id="supabase-key-input" placeholder="eyJhbGciOiJIUzI1NiIsIn..." 
+            <label class="block font-bold text-slate-800 text-[11px] mb-1">Supabase Publishable Key (Anon Key)</label>
+            <input type="password" id="supabase-key-input" placeholder="sb_publishable_... 또는 eyJhbGci..." 
               class="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-800 font-mono text-xs focus:ring-2 focus:ring-blue-500">
           </div>
           <div class="pt-1 flex items-center justify-between">
-            <span id="supabase-conn-status" class="text-[11px] text-slate-500 font-medium">연동 대기중</span>
+            <span id="supabase-conn-status" class="text-[11px] text-slate-500 font-medium">연동 상태 확인중...</span>
             <button type="button" onclick="saveSupabaseConfig()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold px-3 py-1.5 rounded-lg text-xs shadow-xs transition">
               연동 저장 및 시작
             </button>

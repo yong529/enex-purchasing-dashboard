@@ -2,6 +2,8 @@
   "members": [
     {
       "id": "member-1",
+      "username": "kim",
+      "password": "1234",
       "name": "김차장",
       "title": "차장",
       "role": "원자재 총괄 (PB · MDF 원판 수급 및 단가계약)",
@@ -11,6 +13,8 @@
     },
     {
       "id": "member-2",
+      "username": "lee",
+      "password": "1234",
       "name": "이과장",
       "title": "과장",
       "role": "하드웨어 (힌지 · 레일 · 서랍재 단가협상)",
@@ -20,6 +24,8 @@
     },
     {
       "id": "member-3",
+      "username": "park",
+      "password": "1234",
       "name": "박대리",
       "title": "대리",
       "role": "빌트인 가전 · 기기 (후드 · 쿡탑 · 싱크볼 OEM)",
@@ -29,6 +35,8 @@
     },
     {
       "id": "member-4",
+      "username": "choi",
+      "password": "1234",
       "name": "최대리",
       "title": "대리",
       "role": "외주가공 · 포장물류 (도어 UV도장 · 완충재)",
@@ -38,6 +46,8 @@
     },
     {
       "id": "member-5",
+      "username": "jung",
+      "password": "1234",
       "name": "정주임",
       "title": "주임",
       "role": "ERP 전표 · 마감정산 (세금계산서 대조 및 정산)",

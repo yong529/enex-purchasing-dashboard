@@ -93,6 +93,8 @@ const server = http.createServer(async (req, res) => {
     if (body.role !== undefined) member.role = body.role;
     if (body.icon !== undefined) member.icon = body.icon;
     if (body.color !== undefined) member.color = body.color;
+    if (body.username !== undefined) member.username = body.username;
+    if (body.password !== undefined) member.password = body.password;
 
     writeDB(db);
     return sendJSON(res, 200, member);
@@ -102,7 +104,9 @@ const server = http.createServer(async (req, res) => {
     const body = await parseBody(req);
     const db = readDB();
     const newMember = {
-      id: `member-${Date.now()}`,
+      id: body.id || `member-${Date.now()}`,
+      username: body.username || `user-${Date.now()}`,
+      password: body.password || '1234',
       name: body.name || '새 담당자',
       title: body.title || '사원',
       role: body.role || '구매 지원',
