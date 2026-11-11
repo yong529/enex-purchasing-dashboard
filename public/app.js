@@ -8,6 +8,40 @@ let selectedCalDate = null;
 let calMemberFilter = 'all';
 let isDirectivesFeedOpen = false;
 
+// Legacy Mock Account / Demo Identifiers (to completely purge)
+const LEGACY_MOCK_MEMBER_IDS = ['member-1', 'member-2', 'member-3', 'member-4', 'member-5'];
+const LEGACY_NAMES = ['김차장', '이과장', '박대리', '최대리', '정주임'];
+const LEGACY_USERNAMES = ['kim', 'lee', 'park', 'choi', 'jung'];
+const LEGACY_EMAILS = ['kim@enex.co.kr', 'lee@enex.co.kr', 'park@enex.co.kr', 'choi@enex.co.kr', 'jung@enex.co.kr'];
+const LEGACY_MOCK_TASK_IDS = ['task-1', 'task-2', 'task-3', 'task-4', 'task-5', 'task-6', 'task-7', 'task-8', 'task-9', 'task-10'];
+const LEGACY_MOCK_DIR_IDS = ['dir-1', 'dir-2', 'dir-3'];
+
+function isLegacyDemo(m) {
+  if (!m) return false;
+  if (LEGACY_MOCK_MEMBER_IDS.includes(m.id)) return true;
+  if (LEGACY_NAMES.includes(m.name)) return true;
+  if (m.username && LEGACY_USERNAMES.includes(m.username.toLowerCase())) return true;
+  if (m.email && LEGACY_EMAILS.includes(m.email.toLowerCase())) return true;
+  return false;
+}
+
+// Immediately purge any cached legacy demo sessions or old store keys from browser storage!
+(function purgeLegacySessions() {
+  try {
+    const cur = localStorage.getItem('enex_current_user_id');
+    if (cur && (LEGACY_MOCK_MEMBER_IDS.includes(cur) || cur === 'member-3')) {
+      localStorage.removeItem('enex_current_user_id');
+    }
+    // Migration flag: force clear old cache so demo accounts never resurrect
+    if (localStorage.getItem('enex_v4_purged_demo') !== 'true_v4') {
+      localStorage.removeItem('enex_current_user_id');
+      localStorage.removeItem('enex_dashboard_v3_state');
+      localStorage.removeItem('enex_dashboard_v4_clean');
+      localStorage.setItem('enex_v4_purged_demo', 'true_v4');
+    }
+  } catch (e) {}
+})();
+
 // Supabase Client instance
 let supabaseClient = null;
 
@@ -74,6 +108,17 @@ function initSupabase() {
       supabaseClient.auth.onAuthStateChange(async (event, session) => {
         console.log('⚡ Supabase Auth Event:', event, session?.user?.email);
         if (session && session.user) {
+          const email = (session.user.email || '').toLowerCase();
+          // If cached session is an old demo user, sign out immediately
+          if (LEGACY_EMAILS.includes(email) || LEGACY_USERNAMES.some(u => email.startsWith(u + '@'))) {
+            console.log('Purging legacy demo auth session:', email);
+            await supabaseClient.auth.signOut();
+            currentUserId = null;
+            localStorage.removeItem('enex_current_user_id');
+            renderAll();
+            openLoginModal(true);
+            return;
+          }
           await syncAuthUserWithProfile(session.user);
         }
       });
@@ -137,9 +182,30 @@ async function fetchSupabaseData() {
       supabaseClient.from('directives').select('*').order('created_at', { ascending: false })
     ]);
 
-    if (mRes.data && mRes.data.length > 0) members = mRes.data;
-    if (tRes.data) tasks = tRes.data;
-    if (dRes.data) directives = dRes.data;
+    // Permanently purge legacy demo rows from remote Supabase DB in background
+    try {
+      supabaseClient.from('members').delete().in('id', LEGACY_MOCK_MEMBER_IDS).then(() => {});
+      supabaseClient.from('members').delete().in('name', LEGACY_NAMES).then(() => {});
+      supabaseClient.from('tasks').delete().in('id', LEGACY_MOCK_TASK_IDS).then(() => {});
+      supabaseClient.from('directives').delete().in('id', LEGACY_MOCK_DIR_IDS).then(() => {});
+    } catch (e) {}
+
+    // In-memory filter out legacy demo items
+    if (mRes.data) {
+      members = mRes.data.filter(m => !isLegacyDemo(m));
+    }
+    if (tRes.data) {
+      tasks = tRes.data.filter(t => !LEGACY_MOCK_TASK_IDS.includes(t.id));
+    }
+    if (dRes.data) {
+      directives = dRes.data.filter(d => !LEGACY_MOCK_DIR_IDS.includes(d.id));
+    }
+
+    // Ensure Admin 'yong' is always present in members and synced to Supabase
+    if (!members.some(m => m.username === 'yong' || m.id === 'admin-yong')) {
+      members.unshift(JSON.parse(JSON.stringify(ADMIN_USER)));
+      supabaseClient.from('members').upsert([ADMIN_USER]).then(() => {});
+    }
 
     renderAll();
     return true;
@@ -214,10 +280,15 @@ async function fetchInitialData() {
 
 function renderAll() {
   const savedUser = localStorage.getItem('enex_current_user_id');
-  if (savedUser && members.some(m => m.id === savedUser)) {
+  if (
+    savedUser && 
+    !LEGACY_MOCK_MEMBER_IDS.includes(savedUser) && 
+    members.some(m => m.id === savedUser && !isLegacyDemo(m))
+  ) {
     currentUserId = savedUser;
   } else {
     currentUserId = null;
+    localStorage.removeItem('enex_current_user_id');
   }
 
   if (currentUserId) {
@@ -247,14 +318,14 @@ function loadLocalState() {
     if (saved) {
       const parsed = JSON.parse(saved);
       if (Array.isArray(parsed.members)) {
-        // filter out any old demo users (member-1 to member-5) if present
-        members = parsed.members.filter(m => !['member-1', 'member-2', 'member-3', 'member-4', 'member-5'].includes(m.id));
+        // filter out any old demo users (member-1 to member-5, kim, lee, park, choi, jung)
+        members = parsed.members.filter(m => !isLegacyDemo(m));
         // Ensure admin yong is always present
         if (!members.some(m => m.username === 'yong' || m.id === 'admin-yong')) {
           members.unshift(JSON.parse(JSON.stringify(ADMIN_USER)));
         }
-        tasks = (parsed.tasks || []).filter(t => !['task-1', 'task-2', 'task-3', 'task-4', 'task-5', 'task-6', 'task-7', 'task-8', 'task-9', 'task-10'].includes(t.id));
-        directives = (parsed.directives || []).filter(d => !['dir-1', 'dir-2', 'dir-3'].includes(d.id));
+        tasks = (parsed.tasks || []).filter(t => !LEGACY_MOCK_TASK_IDS.includes(t.id));
+        directives = (parsed.directives || []).filter(d => !LEGACY_MOCK_DIR_IDS.includes(d.id));
         saveLocalState();
         return;
       }
@@ -1053,9 +1124,8 @@ function openLoginModal(isRequired = false) {
 }
 
 function closeLoginModal() {
-  // If not logged in, prevent closing
+  // If not logged in, absolutely DO NOT allow closing
   if (!currentUserId) {
-    alert('대시보드를 이용하시려면 먼저 로그인하거나 팀원 계정을 등록해 주세요.');
     return;
   }
   document.getElementById('login-modal').classList.add('hidden');
@@ -1068,8 +1138,12 @@ function renderLoginAccountsList() {
   if (!list) return;
   list.innerHTML = '';
 
-  // Exclude admin from the regular members quick-select list
-  const regularMembers = members.filter(m => m.username !== 'yong' && m.id !== 'admin-yong');
+  // Exclude admin and any legacy demo accounts from the regular members quick-select list
+  const regularMembers = members.filter(m => 
+    m.username !== 'yong' && 
+    m.id !== 'admin-yong' && 
+    !isLegacyDemo(m)
+  );
 
   if (regularMembers.length === 0) {
     list.innerHTML = `
