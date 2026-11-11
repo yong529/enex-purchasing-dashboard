@@ -2,7 +2,7 @@
 let members = [];
 let tasks = [];
 let directives = [];
-let currentUserId = 'member-1';
+let currentUserId = null; // null by default: requires login on initial load!
 let expandedMemberIds = new Set();
 let selectedCalDate = null;
 let calMemberFilter = 'all';
@@ -32,33 +32,24 @@ function formatDate(d) {
   return `${year}-${month}-${day}`;
 }
 
-// Default Seed Data (used when local/cloud database is initially empty)
-const DEFAULT_MEMBERS = [
-  { id: "member-1", username: "kim", email: "kim@enex.co.kr", password: "1234", name: "김차장", title: "차장", role: "원자재 총괄 (PB · MDF 원판 수급 및 단가계약)", icon: "👔", color: "indigo", order_num: 1 },
-  { id: "member-2", username: "lee", email: "lee@enex.co.kr", password: "1234", name: "이과장", title: "과장", role: "하드웨어 (힌지 · 레일 · 서랍재 단가협상)", icon: "🔩", color: "amber", order_num: 2 },
-  { id: "member-3", username: "park", email: "park@enex.co.kr", password: "1234", name: "박대리", title: "대리", role: "빌트인 가전 · 기기 (후드 · 쿡탑 · 싱크볼 OEM)", icon: "🍳", color: "blue", order_num: 3 },
-  { id: "member-4", username: "choi", email: "choi@enex.co.kr", password: "1234", name: "최대리", title: "대리", role: "외주가공 · 포장물류 (도어 UV도장 · 완충재)", icon: "📦", color: "purple", order_num: 4 },
-  { id: "member-5", username: "jung", email: "jung@enex.co.kr", password: "1234", name: "정주임", title: "주임", role: "ERP 전표 · 마감정산 (세금계산서 대조 및 정산)", icon: "📑", color: "emerald", order_num: 5 }
-];
+// Master Admin User Account (ID: yong / PW: 1234)
+const ADMIN_USER = {
+  id: "admin-yong",
+  username: "yong",
+  email: "yong@enex.co.kr",
+  password: "1234",
+  name: "관리자 (용)",
+  title: "총괄관리자",
+  role: "구매본부 시스템 총괄 및 클라우드 DB/인증 관리",
+  icon: "👑",
+  color: "indigo",
+  order_num: 1,
+  is_admin: true
+};
 
-const DEFAULT_TASKS = [
-  { id: "task-1", member_id: "member-1", title: "한솔홈데코 18T PB 원판 4분기 공급단가 재계약 품의", deadline: formatDate(new Date(Date.now() + 3 * 86400000)), priority: "urgent", memo: "전분기 대비 3.2% 인상 요구 건 방어 협상안 포함", is_completed: false, created_at: new Date().toISOString() },
-  { id: "task-2", member_id: "member-1", title: "2027년도 주방가구 원자재 수급 계획안 본부장 보고", deadline: formatDate(new Date(Date.now() + 7 * 86400000)), priority: "normal", memo: "아산 1공장 생산 케파 증설 계획안 반영", is_completed: false, created_at: new Date().toISOString() },
-  { id: "task-3", member_id: "member-2", title: "헤펠레 댐핑 힌지 독일 선적 지연 확인 및 대체품 발주", deadline: formatDate(new Date(Date.now() + 1 * 86400000)), priority: "urgent", memo: "문성하드웨어 국내 재고 1,500set 긴급 차입 발주", is_completed: false, created_at: new Date().toISOString() },
-  { id: "task-4", member_id: "member-2", title: "블룸 서랍 레일 시스템 신제품 단가 비교표 작성", deadline: formatDate(new Date(Date.now() + 5 * 86400000)), priority: "normal", memo: "에넥스 프리미엄 키친 라인업 적용 검토", is_completed: false, created_at: new Date().toISOString() },
-  { id: "task-5", member_id: "member-3", title: "하츠 침니후드 4분기 정기 발주서 발행 (420대)", deadline: formatDate(new Date(Date.now() + 2 * 86400000)), priority: "urgent", memo: "생산일정 맞춰 아산공장 직송 요청", is_completed: false, created_at: new Date().toISOString() },
-  { id: "task-6", member_id: "member-3", title: "SK매직 3구 인덕션 안성물류센터 입고 검수 일정 조율", deadline: formatDate(new Date(Date.now() + 4 * 86400000)), priority: "normal", memo: "불량률 0% 확인 및 ERP 전표 처리 예정", is_completed: false, created_at: new Date().toISOString() },
-  { id: "task-7", member_id: "member-4", title: "아산공장 완충재 및 파렛트 11월분 정기 발주", deadline: formatDate(new Date(Date.now() + 1 * 86400000)), priority: "normal", memo: "월말 성수기 대비 20% 추가 확보", is_completed: false, created_at: new Date().toISOString() },
-  { id: "task-8", member_id: "member-4", title: "우진목재 도어 UV도장 외주가공 단가 인상 요청 건 실사", deadline: formatDate(new Date(Date.now() + 6 * 86400000)), priority: "urgent", memo: "페인트 원자재 인상분 근거 서류 현장 대조", is_completed: false, created_at: new Date().toISOString() },
-  { id: "task-9", member_id: "member-5", title: "10월 마감 협력사 세금계산서 대조 및 전표 회계팀 이관", deadline: formatDate(today), priority: "urgent", memo: "오늘 18:00 마감 전표 최종 확인 필요", is_completed: false, created_at: new Date().toISOString() },
-  { id: "task-10", member_id: "member-5", title: "신규 거래처(대성목재) ERP 등록 및 서류 취합", deadline: formatDate(new Date(Date.now() + 3 * 86400000)), priority: "normal", memo: "사업자등록증, 통장사본 승인 완료 후 코드 발급", is_completed: false, created_at: new Date().toISOString() }
-];
-
-const DEFAULT_DIRECTIVES = [
-  { id: "dir-1", issuer_id: "member-1", target_id: "member-2", title: "헤펠레 댐핑 힌지 선적 지연 대체 수배 결과 즉시 보고", content: "아산 키친 라인 멈추지 않도록 문성하드웨어 재고 1,500세트 내일 오전 중 입고 확약서 수령 후 보고할 것.", priority: "urgent", status: "pending", created_at: new Date(Date.now() - 3600000).toISOString() },
-  { id: "dir-2", issuer_id: "member-1", target_id: "all", title: "4분기 협력사 공급단가 인상 요청 건 일체 임의 수용 금지", content: "원가분석표 사전 검토 없이 구두 합의 절대 불가. 원가 상승분 세부 증빙 서류 필수 징구하여 팀장 결재 득할 것.", priority: "urgent", status: "completed", created_at: new Date(Date.now() - 86400000).toISOString() },
-  { id: "dir-3", issuer_id: "member-1", target_id: "member-5", title: "10월 마감 협력사 단가 차액 전표 17:00까지 수정 이관", content: "한솔홈데코 단가 차액 발생 건 계산서 수정 발행 요청 완료되었는지 확인 후 결과 회신 요망.", priority: "urgent", status: "pending", created_at: new Date(Date.now() - 7200000).toISOString() }
-];
+const DEFAULT_MEMBERS = [ADMIN_USER];
+const DEFAULT_TASKS = [];
+const DEFAULT_DIRECTIVES = [];
 
 // ==================== SUPABASE INITIALIZATION ====================
 
@@ -225,10 +216,17 @@ function renderAll() {
   const savedUser = localStorage.getItem('enex_current_user_id');
   if (savedUser && members.some(m => m.id === savedUser)) {
     currentUserId = savedUser;
-  } else if (members.length > 0) {
-    currentUserId = members[0].id;
+  } else {
+    currentUserId = null;
   }
-  expandedMemberIds.add(currentUserId);
+
+  if (currentUserId) {
+    expandedMemberIds.add(currentUserId);
+    closeLoginModal();
+  } else {
+    // Initial view: show login modal on first visit!
+    openLoginModal(true);
+  }
 
   populateCurrentUserSelect();
   populateDirectiveTargetSelect();
@@ -241,43 +239,38 @@ function renderAll() {
 }
 
 function loadLocalState() {
+  // Purge legacy state with mock accounts
+  localStorage.removeItem('enex_dashboard_v3_state');
+
   try {
-    const saved = localStorage.getItem('enex_dashboard_v3_state');
+    const saved = localStorage.getItem('enex_dashboard_v4_clean');
     if (saved) {
       const parsed = JSON.parse(saved);
-      if (Array.isArray(parsed.members) && parsed.members.length > 0) {
-        members = parsed.members;
-        tasks = parsed.tasks || [];
-        directives = parsed.directives || [];
-
-        // Ensure usernames and passwords exist for default members
-        members.forEach(m => {
-          if (!m.username) {
-            const def = DEFAULT_MEMBERS.find(d => d.id === m.id);
-            if (def) {
-              m.username = def.username;
-              m.password = def.password;
-            } else {
-              m.username = m.id.replace('member-', 'user');
-              m.password = '1234';
-            }
-          }
-        });
+      if (Array.isArray(parsed.members)) {
+        // filter out any old demo users (member-1 to member-5) if present
+        members = parsed.members.filter(m => !['member-1', 'member-2', 'member-3', 'member-4', 'member-5'].includes(m.id));
+        // Ensure admin yong is always present
+        if (!members.some(m => m.username === 'yong' || m.id === 'admin-yong')) {
+          members.unshift(JSON.parse(JSON.stringify(ADMIN_USER)));
+        }
+        tasks = (parsed.tasks || []).filter(t => !['task-1', 'task-2', 'task-3', 'task-4', 'task-5', 'task-6', 'task-7', 'task-8', 'task-9', 'task-10'].includes(t.id));
+        directives = (parsed.directives || []).filter(d => !['dir-1', 'dir-2', 'dir-3'].includes(d.id));
+        saveLocalState();
         return;
       }
     }
   } catch (e) {}
 
-  // Defaults if nothing in storage
-  members = JSON.parse(JSON.stringify(DEFAULT_MEMBERS));
-  tasks = JSON.parse(JSON.stringify(DEFAULT_TASKS));
-  directives = JSON.parse(JSON.stringify(DEFAULT_DIRECTIVES));
+  // Defaults: only admin yong
+  members = [JSON.parse(JSON.stringify(ADMIN_USER))];
+  tasks = [];
+  directives = [];
   saveLocalState();
 }
 
 function saveLocalState() {
   try {
-    localStorage.setItem('enex_dashboard_v3_state', JSON.stringify({
+    localStorage.setItem('enex_dashboard_v4_clean', JSON.stringify({
       members, tasks, directives, currentUserId
     }));
   } catch (e) {}
@@ -295,7 +288,7 @@ function populateCurrentUserSelect() {
     opt.textContent = `${m.icon || '👤'} ${m.name} (${m.title})`;
     sel.appendChild(opt);
   });
-  sel.value = currentUserId;
+  if (currentUserId) sel.value = currentUserId;
 }
 
 function changeCurrentUser(newId) {
@@ -310,20 +303,45 @@ function changeCurrentUser(newId) {
 }
 
 function renderMyActionSection() {
-  const curMember = members.find(m => m.id === currentUserId) || { name: '사용자', title: '담당자', icon: '👤', color: 'blue' };
+  const curMember = members.find(m => m.id === currentUserId);
   const todayStr = formatDate(today);
 
-  // Update Top Global Header User Badge
+  // Update Top Global Header User Badge & Supabase Admin Button
   const headerAvatar = document.getElementById('header-user-avatar');
   const headerName = document.getElementById('header-user-name');
-  if (headerAvatar) headerAvatar.textContent = curMember.icon || '👤';
-  if (headerName) headerName.textContent = `${curMember.name} (${curMember.title})`;
+  const supabaseBtn = document.getElementById('header-supabase-btn');
 
-  document.getElementById('my-profile-greeting').textContent = `환영합니다, ${curMember.name} ${curMember.title}님!`;
-  document.getElementById('my-profile-avatar').textContent = curMember.icon || '👤';
-  document.getElementById('my-profile-summary').textContent = `현재 [${curMember.name}] 계정으로 접속 중입니다. 오늘 확인할 긴급 지시사항 및 마감 할 일입니다.`;
+  if (curMember) {
+    const isAdmin = curMember.username === 'yong' || curMember.is_admin === true;
+    if (headerAvatar) headerAvatar.textContent = curMember.icon || '👤';
+    if (headerName) {
+      headerName.innerHTML = `${curMember.name} (${curMember.title})${isAdmin ? ' <span class="text-[9px] bg-amber-100 text-amber-800 font-bold px-1.5 py-0.2 rounded border border-amber-300">관리자</span>' : ''}`;
+    }
 
-  const myDirectives = directives.filter(d => d.target_id === currentUserId || d.target_id === 'all');
+    // Supabase button is ONLY visible when logged in as admin yong!
+    if (supabaseBtn) {
+      if (isAdmin) {
+        supabaseBtn.classList.remove('hidden');
+      } else {
+        supabaseBtn.classList.add('hidden');
+      }
+    }
+
+    document.getElementById('my-profile-greeting').textContent = `환영합니다, ${curMember.name} ${curMember.title}님!`;
+    document.getElementById('my-profile-avatar').textContent = curMember.icon || '👤';
+    document.getElementById('my-profile-summary').textContent = `현재 [${curMember.name}] 계정으로 접속 중입니다. 오늘 확인할 긴급 지시사항 및 마감 할 일입니다.`;
+  } else {
+    // Not logged in
+    if (headerAvatar) headerAvatar.textContent = '👤';
+    if (headerName) headerName.textContent = '로그인이 필요합니다';
+    if (supabaseBtn) supabaseBtn.classList.add('hidden');
+
+    document.getElementById('my-profile-greeting').textContent = `로그인이 필요합니다`;
+    document.getElementById('my-profile-avatar').textContent = '🔒';
+    document.getElementById('my-profile-summary').textContent = `상단의 [계정 전환]을 누르시거나 로그인 창에서 계정을 인증해 주세요.`;
+  }
+
+  const myDirectives = curMember ? directives.filter(d => d.target_id === currentUserId || d.target_id === 'all') : [];
   const myPendingDirectives = myDirectives.filter(d => d.status !== 'completed');
 
   document.getElementById('my-directives-count').textContent = `${myPendingDirectives.length}건 대기`;
@@ -331,7 +349,7 @@ function renderMyActionSection() {
   dirContainer.innerHTML = '';
 
   if (myDirectives.length === 0) {
-    dirContainer.innerHTML = `<p class="text-xs text-slate-400 py-4 text-center">나에게 수신된 지시사항이 없습니다.</p>`;
+    dirContainer.innerHTML = `<p class="text-xs text-slate-400 py-4 text-center">${curMember ? '수신된 지시사항이 없습니다.' : '로그인 후 확인하실 수 있습니다.'}</p>`;
   } else {
     myDirectives.forEach(d => {
       const issuer = members.find(m => m.id === d.issuer_id) || { name: '본부장', icon: '👔' };
@@ -1003,12 +1021,43 @@ async function handleSaveMember(e) {
 
 // ==================== LOGIN & ACCOUNT SWITCHING ====================
 
-function openLoginModal() {
+function quickLoginAdmin() {
+  let admin = members.find(m => m.username === 'yong' || m.id === 'admin-yong');
+  if (!admin) {
+    admin = JSON.parse(JSON.stringify(ADMIN_USER));
+    members.unshift(admin);
+    saveLocalState();
+  }
+  changeCurrentUser(admin.id);
+  closeLoginModal();
+  alert('👑 관리자 (yong) 계정으로 로그인되었습니다.\n우측 상단에 [⚙️ Supabase 연동] 관리 버튼이 활성화되었습니다.');
+}
+
+function openLoginModal(isRequired = false) {
   renderLoginAccountsList();
-  document.getElementById('login-modal').classList.remove('hidden');
+  
+  const modal = document.getElementById('login-modal');
+  if (modal) modal.classList.remove('hidden');
+
+  const closeX = document.getElementById('login-close-x');
+  const closeBtn = document.getElementById('login-close-btn');
+
+  // If user is not logged in yet, gate the modal (must log in or register before closing)
+  if (!currentUserId || isRequired === true) {
+    if (closeX) closeX.classList.add('hidden');
+    if (closeBtn) closeBtn.classList.add('hidden');
+  } else {
+    if (closeX) closeX.classList.remove('hidden');
+    if (closeBtn) closeBtn.classList.remove('hidden');
+  }
 }
 
 function closeLoginModal() {
+  // If not logged in, prevent closing
+  if (!currentUserId) {
+    alert('대시보드를 이용하시려면 먼저 로그인하거나 팀원 계정을 등록해 주세요.');
+    return;
+  }
   document.getElementById('login-modal').classList.add('hidden');
   const form = document.getElementById('direct-login-form');
   if (form) form.reset();
@@ -1019,7 +1068,20 @@ function renderLoginAccountsList() {
   if (!list) return;
   list.innerHTML = '';
 
-  members.forEach(m => {
+  // Exclude admin from the regular members quick-select list
+  const regularMembers = members.filter(m => m.username !== 'yong' && m.id !== 'admin-yong');
+
+  if (regularMembers.length === 0) {
+    list.innerHTML = `
+      <div class="text-[11px] text-slate-400 py-3 text-center bg-slate-50 rounded-xl border border-dashed border-slate-200">
+        등록된 일반 팀원 계정이 없습니다.<br>
+        신규 팀원은 아래 <span class="font-bold text-blue-600">[+ 새 팀원 계정 등록]</span>을 눌러 추가하세요.
+      </div>
+    `;
+    return;
+  }
+
+  regularMembers.forEach(m => {
     const isCurrent = m.id === currentUserId;
     const theme = COLOR_THEMES[m.color] || COLOR_THEMES.blue;
 
@@ -1075,6 +1137,16 @@ async function handleDirectLogin(e) {
     submitBtn.innerHTML = '<span>로그인 확인 중...</span>';
   }
 
+  // 0. Direct Admin Check for ID: yong / PW: 1234
+  if (loginInput.toLowerCase() === 'yong' && passwordInput === '1234') {
+    quickLoginAdmin();
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = '<span>로그인하기</span>';
+    }
+    return;
+  }
+
   const fullEmail = loginInput.includes('@') ? loginInput : `${loginInput}@enex.co.kr`;
 
   // 1. Try Supabase Auth first if connected
@@ -1118,7 +1190,7 @@ async function handleDirectLogin(e) {
     }
   }
 
-  // 2. Demo accounts or Local match fallback (e.g. kim, lee, park, choi, jung / pw: 1234)
+  // 2. Demo accounts or Local match fallback
   const target = members.find(m => 
     (m.username && m.username.toLowerCase() === loginInput.toLowerCase()) || 
     (m.email && m.email.toLowerCase() === fullEmail.toLowerCase()) ||
@@ -1128,7 +1200,7 @@ async function handleDirectLogin(e) {
 
   if (target) {
     if (target.password && target.password !== passwordInput) {
-      alert('비밀번호가 일치하지 않습니다. (기본 비밀번호: 1234)');
+      alert('비밀번호가 일치하지 않습니다.');
       if (submitBtn) {
         submitBtn.disabled = false;
         submitBtn.innerHTML = '<span>로그인하기</span>';
@@ -1160,11 +1232,9 @@ async function handleLogout() {
     } catch (e) {}
   }
   localStorage.removeItem('enex_current_user_id');
-  if (members.length > 0) {
-    currentUserId = members[0].id;
-  }
+  currentUserId = null;
   renderAll();
-  openLoginModal();
+  openLoginModal(true);
 }
 
 // ==================== REGISTER NEW MEMBER (AUTO ORG-CHART ADDITION) ====================
@@ -1177,6 +1247,9 @@ function closeRegisterModal() {
   document.getElementById('register-modal').classList.add('hidden');
   const form = document.getElementById('register-form');
   if (form) form.reset();
+  if (!currentUserId) {
+    openLoginModal(true);
+  }
 }
 
 function setRegIcon(icon) {

@@ -47,8 +47,8 @@
       <div class="flex flex-wrap items-center gap-2">
         <!-- Current Logged In Account Badge -->
         <button onclick="openLoginModal()" class="flex items-center gap-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-xl text-xs transition">
-          <span id="header-user-avatar" class="text-base">👔</span>
-          <span id="header-user-name" class="font-bold text-slate-800">김차장 (차장)</span>
+          <span id="header-user-avatar" class="text-base">👤</span>
+          <span id="header-user-name" class="font-bold text-slate-800">로그인 필요</span>
           <span class="text-[10px] text-blue-600 font-semibold bg-blue-50 border border-blue-200 px-1.5 py-0.2 rounded">계정 전환</span>
         </button>
 
@@ -61,9 +61,9 @@
           지시사항 하달
         </button>
 
-        <button onclick="openSupabaseModal()" class="inline-flex items-center gap-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 font-semibold text-xs px-3 py-2 rounded-xl transition">
+        <button id="header-supabase-btn" onclick="openSupabaseModal()" class="hidden inline-flex items-center gap-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 font-semibold text-xs px-3 py-2 rounded-xl transition">
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
-          Supabase 연동
+          ⚙️ Supabase 연동 (관리자)
         </button>
       </div>
     </header>
@@ -263,25 +263,50 @@
   </div>
 
   <!-- Modal 0: 로그인 / 계정 선택 모달 (Login Modal) -->
-  <div id="login-modal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+  <!-- Modal 0: 로그인 / 계정 선택 모달 (Login Modal) -->
+  <div id="login-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-50 flex items-center justify-center p-4">
     <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100 space-y-4">
       <div class="flex items-center justify-between pb-2 border-b border-slate-100">
-        <div>
-          <h3 class="text-base font-bold text-slate-900">ENEX 구매부 임직원 로그인</h3>
-          <p class="text-xs text-slate-500 mt-0.5">접속하실 본인 계정을 선택하거나 아이디로 로그인하세요.</p>
+        <div class="flex items-center gap-2.5">
+          <div class="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center text-white font-black text-lg shadow-xs">
+            E
+          </div>
+          <div>
+            <h3 class="text-base font-bold text-slate-900">ENEX 구매부 관제 시스템 로그인</h3>
+            <p class="text-[11px] text-slate-500">본인 계정으로 로그인 후 대시보드를 이용하세요.</p>
+          </div>
         </div>
-        <button onclick="closeLoginModal()" class="text-slate-400 hover:text-slate-600">
+        <button id="login-close-x" onclick="closeLoginModal()" class="hidden text-slate-400 hover:text-slate-600">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
         </button>
       </div>
 
-      <!-- Quick 1-Click Select List -->
-      <div class="space-y-2">
-        <div class="flex items-center justify-between">
-          <label class="block font-bold text-slate-700 text-xs">⚡ 원클릭 빠른 계정 전환</label>
-          <span class="text-[11px] text-slate-400">클릭 즉시 접속</span>
+      <!-- Admin Quick 1-Click Login Card -->
+      <button type="button" onclick="quickLoginAdmin()" class="w-full bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 hover:from-slate-800 hover:to-indigo-900 text-white font-bold p-3 rounded-2xl shadow-sm transition flex items-center justify-between text-xs border border-slate-700/80 group">
+        <div class="flex items-center gap-2.5 text-left">
+          <div class="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center text-xl shrink-0 group-hover:scale-110 transition">
+            👑
+          </div>
+          <div>
+            <div class="flex items-center gap-1.5">
+              <span class="font-black text-white text-xs">관리자 (yong) 즉시 로그인</span>
+              <span class="text-[9px] bg-amber-400/20 text-amber-300 font-bold px-1.5 py-0.2 rounded border border-amber-400/30">Admin</span>
+            </div>
+            <div class="text-[10px] text-slate-300 mt-0.5">ID: yong / PW: 1234 • Supabase 연동 관리 권한</div>
+          </div>
         </div>
-        <div class="grid grid-cols-1 gap-1.5 max-h-56 overflow-y-auto pr-1 custom-scroll" id="login-accounts-list">
+        <span class="text-[10px] bg-white/10 group-hover:bg-blue-600 text-white font-bold px-2 py-1 rounded-lg transition shrink-0">
+          원클릭 접속 &rarr;
+        </span>
+      </button>
+
+      <!-- Quick 1-Click Select List (for registered team members) -->
+      <div class="space-y-1.5" id="login-accounts-section">
+        <div class="flex items-center justify-between">
+          <label class="block font-bold text-slate-700 text-xs">등록된 구매부 팀원 빠른 접속</label>
+          <span class="text-[10px] text-slate-400">클릭 즉시 접속</span>
+        </div>
+        <div class="grid grid-cols-1 gap-1.5 max-h-40 overflow-y-auto pr-1 custom-scroll" id="login-accounts-list">
           <!-- Populated dynamically -->
         </div>
       </div>
@@ -290,22 +315,22 @@
       <div class="pt-3 border-t border-slate-100 space-y-2">
         <div class="flex items-center justify-between">
           <label class="block font-bold text-slate-700 text-xs">🔑 아이디 / 이메일 실시간 로그인</label>
-          <span class="text-[10px] text-emerald-600 font-semibold bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">Supabase Auth 연동</span>
+          <span class="text-[10px] text-emerald-600 font-semibold bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">Supabase Auth</span>
         </div>
         <form id="direct-login-form" onsubmit="handleDirectLogin(event)" class="space-y-2 text-xs">
           <div class="space-y-1.5">
             <div>
               <label class="block text-[11px] font-medium text-slate-600 mb-0.5">아이디 또는 이메일</label>
-              <input type="text" id="login-username-input" placeholder="예: kim 또는 kim@enex.co.kr" required
+              <input type="text" id="login-username-input" placeholder="예: yong 또는 사내 이메일" required
                 class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none">
             </div>
             <div>
               <label class="block text-[11px] font-medium text-slate-600 mb-0.5">비밀번호</label>
-              <input type="password" id="login-password-input" placeholder="비밀번호 (기본: 1234)" required
+              <input type="password" id="login-password-input" placeholder="비밀번호" required
                 class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none">
             </div>
           </div>
-          <button type="submit" id="btn-login-submit" class="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-2.5 rounded-xl transition text-xs shadow-xs flex items-center justify-center gap-1.5">
+          <button type="submit" id="btn-login-submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-xl transition text-xs shadow-xs flex items-center justify-center gap-1.5">
             <span>로그인하기</span>
           </button>
         </form>
@@ -313,9 +338,9 @@
 
       <div class="pt-2 border-t border-slate-100 flex items-center justify-between">
         <button onclick="closeLoginModal(); openRegisterModal();" class="text-xs font-bold text-blue-600 hover:text-blue-800">
-          + 새 팀원 계정 등록 (조직도 자동 추가)
+          + 새 팀원 계정 등록 (회원가입 & 조직도 추가)
         </button>
-        <button onclick="closeLoginModal()" class="px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-100 font-semibold text-xs transition">
+        <button id="login-close-btn" onclick="closeLoginModal()" class="hidden px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-100 font-semibold text-xs transition">
           닫기
         </button>
       </div>
