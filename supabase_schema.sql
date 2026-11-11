@@ -7,6 +7,7 @@
 CREATE TABLE IF NOT EXISTS public.members (
     id TEXT PRIMARY KEY,
     username TEXT,
+    email TEXT,
     password TEXT DEFAULT '1234',
     name TEXT NOT NULL,
     title TEXT NOT NULL,
@@ -19,6 +20,7 @@ CREATE TABLE IF NOT EXISTS public.members (
 
 -- 기존 테이블이 이미 생성되어 있을 경우를 대비한 컬럼 추가
 ALTER TABLE public.members ADD COLUMN IF NOT EXISTS username TEXT;
+ALTER TABLE public.members ADD COLUMN IF NOT EXISTS email TEXT;
 ALTER TABLE public.members ADD COLUMN IF NOT EXISTS password TEXT DEFAULT '1234';
 
 -- 2. 할 일 & 마감일 테이블 (tasks)

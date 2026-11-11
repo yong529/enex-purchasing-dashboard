@@ -34,11 +34,11 @@ function formatDate(d) {
 
 // Default Seed Data (used when local/cloud database is initially empty)
 const DEFAULT_MEMBERS = [
-  { id: "member-1", username: "kim", password: "1234", name: "김차장", title: "차장", role: "원자재 총괄 (PB · MDF 원판 수급 및 단가계약)", icon: "👔", color: "indigo", order_num: 1 },
-  { id: "member-2", username: "lee", password: "1234", name: "이과장", title: "과장", role: "하드웨어 (힌지 · 레일 · 서랍재 단가협상)", icon: "🔩", color: "amber", order_num: 2 },
-  { id: "member-3", username: "park", password: "1234", name: "박대리", title: "대리", role: "빌트인 가전 · 기기 (후드 · 쿡탑 · 싱크볼 OEM)", icon: "🍳", color: "blue", order_num: 3 },
-  { id: "member-4", username: "choi", password: "1234", name: "최대리", title: "대리", role: "외주가공 · 포장물류 (도어 UV도장 · 완충재)", icon: "📦", color: "purple", order_num: 4 },
-  { id: "member-5", username: "jung", password: "1234", name: "정주임", title: "주임", role: "ERP 전표 · 마감정산 (세금계산서 대조 및 정산)", icon: "📑", color: "emerald", order_num: 5 }
+  { id: "member-1", username: "kim", email: "kim@enex.co.kr", password: "1234", name: "김차장", title: "차장", role: "원자재 총괄 (PB · MDF 원판 수급 및 단가계약)", icon: "👔", color: "indigo", order_num: 1 },
+  { id: "member-2", username: "lee", email: "lee@enex.co.kr", password: "1234", name: "이과장", title: "과장", role: "하드웨어 (힌지 · 레일 · 서랍재 단가협상)", icon: "🔩", color: "amber", order_num: 2 },
+  { id: "member-3", username: "park", email: "park@enex.co.kr", password: "1234", name: "박대리", title: "대리", role: "빌트인 가전 · 기기 (후드 · 쿡탑 · 싱크볼 OEM)", icon: "🍳", color: "blue", order_num: 3 },
+  { id: "member-4", username: "choi", email: "choi@enex.co.kr", password: "1234", name: "최대리", title: "대리", role: "외주가공 · 포장물류 (도어 UV도장 · 완충재)", icon: "📦", color: "purple", order_num: 4 },
+  { id: "member-5", username: "jung", email: "jung@enex.co.kr", password: "1234", name: "정주임", title: "주임", role: "ERP 전표 · 마감정산 (세금계산서 대조 및 정산)", icon: "📑", color: "emerald", order_num: 5 }
 ];
 
 const DEFAULT_TASKS = [
@@ -63,7 +63,7 @@ const DEFAULT_DIRECTIVES = [
 // ==================== SUPABASE INITIALIZATION ====================
 
 function initSupabase() {
-  const url = localStorage.getItem('supabase_url');
+  const url = localStorage.getItem('supabase_url') || 'https://lnilzitmifivbhauepac.supabase.co';
   const key = localStorage.getItem('supabase_anon_key');
 
   if (url && key && window.supabase) {
@@ -79,9 +79,17 @@ function initSupabase() {
         .on('postgres_changes', { event: '*', schema: 'public', table: 'directives' }, () => fetchSupabaseData())
         .subscribe();
 
+      // Listen to Supabase Auth State changes
+      supabaseClient.auth.onAuthStateChange(async (event, session) => {
+        console.log('⚡ Supabase Auth Event:', event, session?.user?.email);
+        if (session && session.user) {
+          await syncAuthUserWithProfile(session.user);
+        }
+      });
+
       const statusEl = document.getElementById('supabase-conn-status');
       if (statusEl) {
-        statusEl.textContent = '🟢 Supabase 클라우드 실시간 연결됨';
+        statusEl.textContent = '🟢 Supabase 클라우드 실시간 & Auth 연결됨';
         statusEl.className = 'text-[11px] text-emerald-600 font-bold';
       }
       return true;
@@ -90,6 +98,43 @@ function initSupabase() {
     }
   }
   return false;
+}
+
+async function syncAuthUserWithProfile(authUser) {
+  if (!authUser) return;
+  // Check if member exists in members list
+  let member = members.find(m => m.id === authUser.id || (m.email && m.email.toLowerCase() === authUser.email.toLowerCase()));
+  if (!member && supabaseClient) {
+    try {
+      const { data } = await supabaseClient.from('members').select('*').or(`id.eq.${authUser.id},email.eq.${authUser.email}`);
+      if (data && data.length > 0) member = data[0];
+    } catch (e) {}
+  }
+
+  if (!member) {
+    const meta = authUser.user_metadata || {};
+    member = {
+      id: authUser.id,
+      email: authUser.email,
+      username: meta.username || authUser.email.split('@')[0],
+      name: meta.name || authUser.email.split('@')[0],
+      title: meta.title || '사원',
+      role: meta.role || '구매 관리 및 발주 담당',
+      icon: meta.icon || '🧑‍💼',
+      color: meta.color || 'blue',
+      order_num: members.length + 1,
+      created_at: new Date().toISOString()
+    };
+    members.push(member);
+    if (supabaseClient) {
+      try { await supabaseClient.from('members').upsert([member]); } catch (e) {}
+    }
+  }
+
+  currentUserId = member.id;
+  localStorage.setItem('enex_current_user_id', member.id);
+  expandedMemberIds.add(member.id);
+  renderAll();
 }
 
 async function fetchSupabaseData() {
@@ -1019,29 +1064,107 @@ function renderLoginAccountsList() {
   });
 }
 
-function handleDirectLogin(e) {
+async function handleDirectLogin(e) {
   e.preventDefault();
-  const usernameInput = document.getElementById('login-username-input').value.trim().toLowerCase();
+  const loginInput = document.getElementById('login-username-input').value.trim();
   const passwordInput = document.getElementById('login-password-input').value.trim();
+  const submitBtn = document.getElementById('btn-login-submit');
 
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<span>로그인 확인 중...</span>';
+  }
+
+  const fullEmail = loginInput.includes('@') ? loginInput : `${loginInput}@enex.co.kr`;
+
+  // 1. Try Supabase Auth first if connected
+  if (supabaseClient) {
+    try {
+      const { data, error } = await supabaseClient.auth.signInWithPassword({
+        email: fullEmail,
+        password: passwordInput
+      });
+
+      if (!error && data?.session?.user) {
+        await fetchSupabaseData();
+        let member = members.find(m => m.id === data.user.id || (m.email && m.email.toLowerCase() === data.user.email.toLowerCase()));
+        if (!member) {
+          const meta = data.user.user_metadata || {};
+          member = {
+            id: data.user.id,
+            email: data.user.email,
+            username: meta.username || data.user.email.split('@')[0],
+            name: meta.name || data.user.email.split('@')[0],
+            title: meta.title || '사원',
+            role: meta.role || '구매 관리 및 발주 담당',
+            icon: meta.icon || '🧑‍💼',
+            color: meta.color || 'blue',
+            order_num: members.length + 1
+          };
+          members.push(member);
+          try { await supabaseClient.from('members').upsert([member]); } catch (e) {}
+        }
+        changeCurrentUser(member.id);
+        closeLoginModal();
+        alert(`🔑 [${member.name} ${member.title}] 님 환영합니다!\nSupabase 클라우드 실시간 인증으로 로그인되었습니다.`);
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.innerHTML = '<span>로그인하기</span>';
+        }
+        return;
+      }
+    } catch (err) {
+      console.warn('Supabase auth attempt:', err);
+    }
+  }
+
+  // 2. Demo accounts or Local match fallback (e.g. kim, lee, park, choi, jung / pw: 1234)
   const target = members.find(m => 
-    (m.username && m.username.toLowerCase() === usernameInput) || 
-    (m.id && m.id.toLowerCase() === usernameInput) ||
-    (m.name && m.name.toLowerCase() === usernameInput)
+    (m.username && m.username.toLowerCase() === loginInput.toLowerCase()) || 
+    (m.email && m.email.toLowerCase() === fullEmail.toLowerCase()) ||
+    (m.id && m.id.toLowerCase() === loginInput.toLowerCase()) ||
+    (m.name && m.name.toLowerCase() === loginInput.toLowerCase())
   );
 
-  if (!target) {
-    alert(`'${usernameInput}' 아이디에 해당하는 직원을 찾을 수 없습니다.\n빠른 계정 선택 목록을 확인해 주세요.`);
+  if (target) {
+    if (target.password && target.password !== passwordInput) {
+      alert('비밀번호가 일치하지 않습니다. (기본 비밀번호: 1234)');
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<span>로그인하기</span>';
+      }
+      return;
+    }
+    changeCurrentUser(target.id);
+    closeLoginModal();
+    alert(`🔑 [${target.name} ${target.title}] 계정으로 접속되었습니다.`);
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = '<span>로그인하기</span>';
+    }
     return;
   }
 
-  if (target.password && target.password !== passwordInput) {
-    alert('비밀번호가 일치하지 않습니다. (기본 비밀번호: 1234)');
-    return;
+  alert(`'${loginInput}' 계정을 찾을 수 없거나 비밀번호가 일치하지 않습니다.\n신규 팀원이시라면 아래 [+ 새 팀원 계정 등록]을 눌러 가입해 주세요.`);
+  if (submitBtn) {
+    submitBtn.disabled = false;
+    submitBtn.innerHTML = '<span>로그인하기</span>';
   }
+}
 
-  changeCurrentUser(target.id);
-  closeLoginModal();
+async function handleLogout() {
+  if (!confirm('로그아웃하시겠습니까?')) return;
+  if (supabaseClient) {
+    try {
+      await supabaseClient.auth.signOut();
+    } catch (e) {}
+  }
+  localStorage.removeItem('enex_current_user_id');
+  if (members.length > 0) {
+    currentUserId = members[0].id;
+  }
+  renderAll();
+  openLoginModal();
 }
 
 // ==================== REGISTER NEW MEMBER (AUTO ORG-CHART ADDITION) ====================
@@ -1066,21 +1189,114 @@ async function handleRegisterUser(e) {
   const name = document.getElementById('reg-name').value.trim();
   const title = document.getElementById('reg-title').value.trim();
   const role = document.getElementById('reg-role').value.trim();
-  const username = document.getElementById('reg-username').value.trim();
-  const password = document.getElementById('reg-password').value.trim() || '1234';
+  const rawUsername = document.getElementById('reg-username').value.trim();
+  const password = document.getElementById('reg-password').value.trim();
   const icon = document.getElementById('reg-icon').value.trim() || '🧑‍💼';
   const color = document.getElementById('reg-color').value || 'blue';
 
-  // Check if username already exists
-  if (members.some(m => m.username && m.username.toLowerCase() === username.toLowerCase())) {
-    alert(`이미 등록된 로그인 아이디입니다: ${username}\n다른 아이디를 지정해 주세요.`);
+  const username = rawUsername.includes('@') ? rawUsername.split('@')[0] : rawUsername;
+  const fullEmail = rawUsername.includes('@') ? rawUsername : `${rawUsername}@enex.co.kr`;
+
+  if (password.length < 6) {
+    alert('비밀번호는 보안을 위해 최소 6자리 이상 입력해 주세요.');
     return;
   }
 
+  // Check if username/email already exists locally
+  if (members.some(m => (m.username && m.username.toLowerCase() === username.toLowerCase()) || (m.email && m.email.toLowerCase() === fullEmail.toLowerCase()))) {
+    alert(`이미 등록된 아이디/이메일입니다: ${rawUsername}\n로그인 창에서 비밀번호를 입력해 접속해 주세요.`);
+    closeRegisterModal();
+    openLoginModal();
+    return;
+  }
+
+  // 1. Supabase Auth Real Sign Up if connected
+  if (supabaseClient) {
+    try {
+      const { data: authData, error: authErr } = await supabaseClient.auth.signUp({
+        email: fullEmail,
+        password: password,
+        options: {
+          data: { name, title, role, icon, color, username }
+        }
+      });
+
+      if (authErr) {
+        if (authErr.message.toLowerCase().includes('already registered')) {
+          alert(`이미 등록된 계정입니다 (${fullEmail}).\n로그인 창에서 비밀번호를 입력해 접속해 주세요.`);
+          closeRegisterModal();
+          openLoginModal();
+          return;
+        }
+        alert('Supabase Auth 가입 오류: ' + authErr.message);
+        return;
+      }
+
+      const newId = authData.user ? authData.user.id : `member-${Date.now()}`;
+      const newMember = {
+        id: newId,
+        username,
+        email: fullEmail,
+        password,
+        name,
+        title,
+        role,
+        icon,
+        color,
+        order_num: members.length + 1,
+        created_at: new Date().toISOString()
+      };
+
+      // Add to public.members in Supabase
+      await supabaseClient.from('members').upsert([newMember]);
+
+      // Add initial onboarding task
+      const welcomeTask = {
+        id: `task-${Date.now()}`,
+        member_id: newId,
+        title: `${name} ${title} 신규 업무 인수인계 및 부서 관제 시스템 등록`,
+        deadline: formatDate(today),
+        priority: 'urgent',
+        memo: '구매본부 자재 ERP 접속 권한 승인 및 담당 품목 단가표 숙지',
+        is_completed: false,
+        created_at: new Date().toISOString()
+      };
+      await supabaseClient.from('tasks').insert([welcomeTask]);
+
+      // Refresh memory & UI
+      members = members.filter(m => m.id !== newId);
+      members.push(newMember);
+      tasks.unshift(welcomeTask);
+      expandedMemberIds.add(newId);
+      currentUserId = newId;
+      localStorage.setItem('enex_current_user_id', newId);
+      saveLocalState();
+
+      closeRegisterModal();
+      renderAll();
+
+      if (authData.session) {
+        alert(`🎉 [${name} ${title}] 님의 계정이 Supabase Auth 보안 인증으로 생성되었습니다!\n구매부 조직도에 자동 추가되었으며 즉시 로그인되었습니다.`);
+      } else {
+        alert(`🎉 [${name} ${title}] 님의 계정이 등록되어 구매부 조직도에 추가되었습니다!\n(Supabase 기본 설정에 따라 메일 인증이 켜져 있을 수 있습니다. 즉시 로그인을 원하시면 Supabase 대시보드 > Authentication > Providers > Email에서 'Confirm email'을 OFF로 설정해 주세요)`);
+      }
+
+      setTimeout(() => {
+        const cardEl = document.getElementById(`member-card-${newId}`);
+        if (cardEl) cardEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 200);
+      return;
+    } catch (err) {
+      console.error('Supabase signup error:', err);
+    }
+  }
+
+  // 2. Offline / Local fallback registration
   const newId = `member-${Date.now()}`;
   const newMember = {
     id: newId,
     username,
+    email: fullEmail,
     password,
     name,
     title,
@@ -1091,11 +1307,9 @@ async function handleRegisterUser(e) {
     created_at: new Date().toISOString()
   };
 
-  // 1. Add to local members array
   members.push(newMember);
   expandedMemberIds.add(newId);
 
-  // 2. Generate initial onboarding welcome task for this newly registered member
   const welcomeTask = {
     id: `task-${Date.now()}`,
     member_id: newId,
@@ -1108,49 +1322,16 @@ async function handleRegisterUser(e) {
   };
   tasks.unshift(welcomeTask);
 
-  // 3. Supabase Cloud Sync
-  if (supabaseClient) {
-    try {
-      await supabaseClient.from('members').insert([newMember]);
-      await supabaseClient.from('tasks').insert([welcomeTask]);
-      console.log('⚡ Supabase member & task inserted:', newMember);
-    } catch (err) {
-      console.warn('Supabase member insert failed:', err);
-    }
-  } else {
-    // Local server API
-    try {
-      await fetch('/api/members', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newMember)
-      });
-      await fetch('/api/tasks', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(welcomeTask)
-      });
-    } catch (e) {}
-  }
-
-  // 4. Save to Local Storage
   saveLocalState();
-
-  // 5. Switch logged-in user to this new member
   currentUserId = newId;
   localStorage.setItem('enex_current_user_id', newId);
-
-  // 6. Close Modal & Re-render all views
   closeRegisterModal();
   renderAll();
 
-  // 7. Notification & scroll into view
-  alert(`🎉 [${name} ${title}] 님의 계정이 생성되어 구매부 조직도에 자동 추가되었습니다!\n현재 [${name}] 계정으로 즉시 로그인되었습니다.`);
+  alert(`🎉 [${name} ${title}] 계정이 생성되어 구매부 조직도에 자동 추가되었습니다!\n현재 [${name}] 계정으로 즉시 로그인되었습니다.`);
   setTimeout(() => {
     const cardEl = document.getElementById(`member-card-${newId}`);
-    if (cardEl) {
-      cardEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
+    if (cardEl) cardEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }, 200);
 }
 
@@ -1307,6 +1488,12 @@ function clearDateFilter() {
 }
 
 function openSupabaseModal() {
+  const url = localStorage.getItem('supabase_url') || 'https://lnilzitmifivbhauepac.supabase.co';
+  const key = localStorage.getItem('supabase_anon_key') || '';
+  const urlEl = document.getElementById('supabase-url-input');
+  const keyEl = document.getElementById('supabase-key-input');
+  if (urlEl) urlEl.value = url;
+  if (keyEl && key) keyEl.value = key;
   document.getElementById('supabase-modal').classList.remove('hidden');
 }
 function closeSupabaseModal() {
