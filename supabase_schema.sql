@@ -64,5 +64,5 @@ CREATE POLICY "Allow public read/write directives" ON public.directives FOR ALL 
 
 -- 6. 초기 관리자 계정 등록 (Admin Seed Data)
 INSERT INTO public.members (id, username, email, password, name, title, role, icon, color, order_num, is_admin) VALUES
-('admin-yong', 'yong', 'yong@enex.co.kr', '1234', '관리자 (용)', '총괄관리자', '구매본부 시스템 총괄 및 클라우드 DB/인증 관리', '👑', 'indigo', 1, true)
+('admin-yong', 'yong', 'yong@enex.co.kr', '1234', '시스템 총괄 관리자', '총괄관리자', '구매본부 시스템 총괄 및 클라우드 DB/인증 관리', '👑', 'indigo', 1, true)
 ON CONFLICT (id) DO UPDATE SET username = EXCLUDED.username, password = EXCLUDED.password, is_admin = true;

@@ -72,7 +72,7 @@ const ADMIN_USER = {
   username: "yong",
   email: "yong@enex.co.kr",
   password: "1234",
-  name: "관리자 (용)",
+  name: "시스템 총괄 관리자",
   title: "총괄관리자",
   role: "구매본부 시스템 총괄 및 클라우드 DB/인증 관리",
   icon: "👑",
@@ -1092,18 +1092,6 @@ async function handleSaveMember(e) {
 
 // ==================== LOGIN & ACCOUNT SWITCHING ====================
 
-function quickLoginAdmin() {
-  let admin = members.find(m => m.username === 'yong' || m.id === 'admin-yong');
-  if (!admin) {
-    admin = JSON.parse(JSON.stringify(ADMIN_USER));
-    members.unshift(admin);
-    saveLocalState();
-  }
-  changeCurrentUser(admin.id);
-  closeLoginModal();
-  alert('👑 관리자 (yong) 계정으로 로그인되었습니다.\n우측 상단에 [⚙️ Supabase 연동] 관리 버튼이 활성화되었습니다.');
-}
-
 function openLoginModal(isRequired = false) {
   renderLoginAccountsList();
   
@@ -1211,9 +1199,25 @@ async function handleDirectLogin(e) {
     submitBtn.innerHTML = '<span>로그인 확인 중...</span>';
   }
 
-  // 0. Direct Admin Check for ID: yong / PW: 1234
-  if (loginInput.toLowerCase() === 'yong' && passwordInput === '1234') {
-    quickLoginAdmin();
+  // 0. System Admin Verification (ID: yong / PW: 1234)
+  if (loginInput.toLowerCase() === 'yong') {
+    if (passwordInput !== '1234') {
+      alert('비밀번호가 일치하지 않습니다.');
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<span>로그인하기</span>';
+      }
+      return;
+    }
+    let admin = members.find(m => m.username === 'yong' || m.id === 'admin-yong');
+    if (!admin) {
+      admin = JSON.parse(JSON.stringify(ADMIN_USER));
+      members.unshift(admin);
+      saveLocalState();
+    }
+    changeCurrentUser(admin.id);
+    closeLoginModal();
+    alert('👑 시스템 총괄 관리자로 인증되었습니다.\n우측 상단에 [⚙️ Supabase 연동] 관리 버튼이 활성화되었습니다.');
     if (submitBtn) {
       submitBtn.disabled = false;
       submitBtn.innerHTML = '<span>로그인하기</span>';
