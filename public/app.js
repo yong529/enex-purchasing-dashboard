@@ -149,7 +149,7 @@ function getTeamMembers() {
 // ==================== SUPABASE INITIALIZATION ====================
 
 const DEFAULT_SUPABASE_URL = 'https://lnilzitmifivbhauepac.supabase.co';
-let DEFAULT_SUPABASE_ANON_KEY = '';
+const DEFAULT_SUPABASE_ANON_KEY = 'sb_publishable_Z5badNutLf29-d4Zmhihuw_cDtRimH6';
 
 function updateSupabaseStatusUI() {
   const isConnected = !!supabaseClient;
@@ -163,56 +163,36 @@ function updateSupabaseStatusUI() {
       statusEl.textContent = '🟢 Supabase 클라우드 실시간 & Auth 연결됨';
       statusEl.className = 'text-[11px] text-emerald-600 font-bold';
     } else {
-      statusEl.textContent = '⚠️ 클라우드 미연결 (Anon Key 필요)';
+      statusEl.textContent = '⚠️ 클라우드 미연결';
       statusEl.className = 'text-[11px] text-amber-600 font-bold';
     }
   }
 
+  // Clean, seamless status banner for users (No technical jargon)
   if (alertEl) {
     if (isConnected) {
-      alertEl.className = 'p-2.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-[11px] flex items-center justify-between gap-2';
+      alertEl.className = 'p-2 rounded-xl bg-emerald-50/80 border border-emerald-200/80 text-emerald-800 text-[11px] flex items-center justify-between gap-2';
       alertEl.innerHTML = `
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-1.5">
           <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-          <span class="font-bold">Supabase 클라우드 실시간 연동됨</span>
+          <span class="font-bold">구매부 클라우드 실시간 중앙 서버 연결됨</span>
         </div>
-        <span class="text-[10px] text-emerald-600 bg-white px-2 py-0.5 rounded-full border border-emerald-200 font-semibold">전사 PC 동기화</span>
+        <span class="text-[10px] text-emerald-700 bg-white px-2 py-0.5 rounded-full border border-emerald-200 font-semibold">전사 실시간 동기화</span>
       `;
     } else {
-      alertEl.className = 'p-3 rounded-2xl bg-amber-50 border border-amber-300 text-amber-900 text-xs space-y-2';
-      alertEl.innerHTML = `
-        <div class="flex items-start gap-2">
-          <span class="text-base shrink-0">⚠️</span>
-          <div>
-            <div class="font-extrabold text-amber-900">클라우드 데이터베이스 미연결 (오프라인 모드)</div>
-            <div class="text-[11px] text-amber-700 mt-0.5 leading-tight">
-              현재 브라우저에 Supabase API 키가 설정되지 않아 다른 PC와 계정 및 데이터가 동기화되지 않습니다.
-            </div>
-          </div>
-        </div>
-        <button type="button" onclick="openSupabaseModal()" class="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold py-1.5 px-3 rounded-xl transition text-[11px] flex items-center justify-center gap-1.5 shadow-2xs">
-          <span>⚙️ Supabase 클라우드 연동 키 입력하기 &rarr;</span>
-        </button>
-      `;
+      alertEl.innerHTML = '';
     }
   }
 
   if (regAlertEl) {
     if (isConnected) {
-      regAlertEl.className = 'p-2 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-[11px] flex items-center gap-2';
+      regAlertEl.className = 'p-2 rounded-xl bg-emerald-50/80 border border-emerald-200/80 text-emerald-800 text-[11px] flex items-center gap-1.5';
       regAlertEl.innerHTML = `
-        <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
-        <span class="font-semibold">클라우드 동기화 켜짐: 등록 즉시 전 부서원 화면과 Supabase에 저장됩니다.</span>
+        <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+        <span class="font-semibold">클라우드 동기화: 등록 즉시 전 구매부 조직도 및 실시간 DB에 저장됩니다.</span>
       `;
     } else {
-      regAlertEl.className = 'p-2.5 rounded-xl bg-amber-50 border border-amber-300 text-amber-900 text-[11px] flex items-center justify-between gap-2';
-      regAlertEl.innerHTML = `
-        <div class="flex items-center gap-1.5">
-          <span>⚠️</span>
-          <span class="font-medium">미연결: 지금 가입하면 이 PC에만 임시 저장됩니다.</span>
-        </div>
-        <button type="button" onclick="openSupabaseModal()" class="shrink-0 text-blue-700 underline font-bold text-[10px]">연동 설정</button>
-      `;
+      regAlertEl.innerHTML = '';
     }
   }
 
@@ -224,12 +204,6 @@ function updateSupabaseStatusUI() {
       headerBtn.innerHTML = `
         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
         ⚙️ Supabase 연동 (관리자)
-      `;
-    } else if (!isConnected) {
-      headerBtn.classList.remove('hidden');
-      headerBtn.className = 'inline-flex items-center gap-1.5 bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 font-bold text-xs px-3 py-2 rounded-xl transition animate-pulse';
-      headerBtn.innerHTML = `
-        <span>⚡ Supabase 키 입력 필요</span>
       `;
     } else {
       headerBtn.classList.add('hidden');
