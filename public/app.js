@@ -17,6 +17,10 @@ let currentReportWeekRange = '';
 let customReportRangeText = null;
 let editingReportMemberId = null;
 
+// Prime state from local storage immediately
+loadWeeklyLocalState();
+
+
 
 // Legacy Mock Account / Demo Identifiers (to completely purge)
 const LEGACY_MOCK_MEMBER_IDS = ['member-1', 'member-2', 'member-3', 'member-4', 'member-5'];
@@ -234,23 +238,34 @@ async function fetchSupabaseData() {
       supabaseClient.from('members').upsert([ADMIN_USER]).then(() => {});
     }
 
-    // Fetch weekly reports and common notes
+    // Fetch weekly reports and common notes safely (preserving local storage)
     try {
       const [wRes, nRes] = await Promise.all([
         supabaseClient.from('weekly_reports').select('*'),
         supabaseClient.from('weekly_common_notes').select('*')
       ]);
-      if (wRes.data && Array.isArray(wRes.data) && wRes.data.length > 0) {
-        weeklyReports = wRes.data;
+
+      if (wRes && !wRes.error && Array.isArray(wRes.data) && wRes.data.length > 0) {
+        // Merge remote data into weeklyReports
+        wRes.data.forEach(remoteRep => {
+          const idx = weeklyReports.findIndex(r => r.id === remoteRep.id || (r.week_id === remoteRep.week_id && r.member_id === remoteRep.member_id));
+          if (idx !== -1) {
+            weeklyReports[idx] = remoteRep;
+          } else {
+            weeklyReports.push(remoteRep);
+          }
+        });
+        saveWeeklyLocalState();
       }
-      if (nRes.data && Array.isArray(nRes.data)) {
+
+      if (nRes && !nRes.error && Array.isArray(nRes.data) && nRes.data.length > 0) {
         nRes.data.forEach(item => {
           weeklyCommonNotes[item.week_id] = item;
         });
+        saveWeeklyLocalState();
       }
-      saveWeeklyLocalState();
     } catch (e) {
-      // Graceful fallback if tables are not yet created in Supabase
+      console.warn('Supabase weekly fetch notice:', e);
     }
 
     renderAll();
@@ -289,6 +304,9 @@ function saveSupabaseConfig() {
 // ==================== INITIAL DATA LOADING ====================
 
 async function fetchInitialData() {
+  // Always load weekly state from localStorage first before any remote calls!
+  loadWeeklyLocalState();
+
   // 1. Try Supabase first if configured
   if (initSupabase()) {
     const ok = await fetchSupabaseData();
@@ -404,21 +422,31 @@ function loadWeeklyLocalState() {
   try {
     const savedReports = localStorage.getItem('enex_weekly_reports_v1');
     if (savedReports) {
-      weeklyReports = JSON.parse(savedReports);
+      const parsed = JSON.parse(savedReports);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        weeklyReports = parsed;
+      }
     }
   } catch (e) {}
   try {
     const savedNotes = localStorage.getItem('enex_weekly_notes_v1');
     if (savedNotes) {
-      weeklyCommonNotes = JSON.parse(savedNotes);
+      const parsed = JSON.parse(savedNotes);
+      if (parsed && typeof parsed === 'object') {
+        weeklyCommonNotes = parsed;
+      }
     }
   } catch (e) {}
 }
 
 function saveWeeklyLocalState() {
   try {
-    localStorage.setItem('enex_weekly_reports_v1', JSON.stringify(weeklyReports));
-    localStorage.setItem('enex_weekly_notes_v1', JSON.stringify(weeklyCommonNotes));
+    if (Array.isArray(weeklyReports)) {
+      localStorage.setItem('enex_weekly_reports_v1', JSON.stringify(weeklyReports));
+    }
+    if (weeklyCommonNotes && typeof weeklyCommonNotes === 'object') {
+      localStorage.setItem('enex_weekly_notes_v1', JSON.stringify(weeklyCommonNotes));
+    }
   } catch (e) {}
 }
 
@@ -2041,8 +2069,15 @@ async function fetchWeeklyReportsFromSupabase() {
   if (!supabaseClient) return;
   try {
     const { data, error } = await supabaseClient.from('weekly_reports').select('*');
-    if (!error && Array.isArray(data)) {
-      weeklyReports = data;
+    if (!error && Array.isArray(data) && data.length > 0) {
+      data.forEach(remoteRep => {
+        const idx = weeklyReports.findIndex(r => r.id === remoteRep.id || (r.week_id === remoteRep.week_id && r.member_id === remoteRep.member_id));
+        if (idx !== -1) {
+          weeklyReports[idx] = remoteRep;
+        } else {
+          weeklyReports.push(remoteRep);
+        }
+      });
       saveWeeklyLocalState();
       // Protect user's typing session: do not re-render actively edited input
       if (editingReportMemberId === null) {
@@ -2056,7 +2091,7 @@ async function fetchWeeklyCommonNotesFromSupabase() {
   if (!supabaseClient) return;
   try {
     const { data, error } = await supabaseClient.from('weekly_common_notes').select('*');
-    if (!error && Array.isArray(data)) {
+    if (!error && Array.isArray(data) && data.length > 0) {
       data.forEach(item => {
         weeklyCommonNotes[item.week_id] = item;
       });
@@ -2123,9 +2158,11 @@ function renderWeeklyReport() {
 
   const isCurAdmin = checkIsAdmin();
 
-  // If no reports exist yet for this week, seed the default sample for the primary member
+  // If no reports exist yet for this week, seed the default sample for the primary member ONLY ONCE
   const hasReportsForWeek = weeklyReports.some(r => r.week_id === currentReportWeekId);
-  if (!hasReportsForWeek && teamMembers.length > 0) {
+  const alreadySeeded = localStorage.getItem('enex_weekly_seeded_v2');
+
+  if (!hasReportsForWeek && !alreadySeeded && teamMembers.length > 0) {
     const primaryMember = teamMembers.find(m => m.username === 'yong' || m.username === 'yjlee02' || m.name.includes('이용주')) || teamMembers[0];
     const sampleEntry = {
       id: `report-${currentReportWeekId}-${primaryMember.id}`,
@@ -2142,6 +2179,7 @@ function renderWeeklyReport() {
       updated_at: new Date().toISOString()
     };
     weeklyReports.push(sampleEntry);
+    localStorage.setItem('enex_weekly_seeded_v2', 'true');
     saveWeeklyLocalState();
     if (supabaseClient) {
       supabaseClient.from('weekly_reports').upsert([sampleEntry]).then(() => {});
@@ -2151,7 +2189,10 @@ function renderWeeklyReport() {
   tbody.innerHTML = '';
 
   teamMembers.forEach(m => {
-    let rep = weeklyReports.find(r => r.week_id === currentReportWeekId && (r.member_id === m.id || r.member_id === m.username));
+    let rep = weeklyReports.find(r => 
+      r.week_id === currentReportWeekId && 
+      (r.member_id === m.id || (m.username && r.member_id === m.username) || r.id === `report-${currentReportWeekId}-${m.id}`)
+    );
     const isMyRow = currentUserId === m.id || (m.username && currentUserId === m.username);
     const canEdit = isCurAdmin || isMyRow;
     const isEditing = editingReportMemberId === m.id;
@@ -2253,7 +2294,13 @@ function renderWeeklyReport() {
   const freeNotesInput = document.getElementById('weekly-free-notes-input');
   const freeNotesMeta = document.getElementById('weekly-free-notes-meta');
   if (freeNotesInput && document.activeElement !== freeNotesInput) {
-    freeNotesInput.value = commonNotesObj ? (commonNotesObj.notes || '') : DEFAULT_COMMON_NOTES;
+    if (commonNotesObj && typeof commonNotesObj.notes === 'string') {
+      freeNotesInput.value = commonNotesObj.notes;
+    } else if (!localStorage.getItem('enex_weekly_notes_seeded_v2')) {
+      freeNotesInput.value = DEFAULT_COMMON_NOTES;
+    } else {
+      freeNotesInput.value = '';
+    }
   }
   if (freeNotesMeta) {
     if (commonNotesObj && commonNotesObj.updated_at) {
@@ -2345,7 +2392,11 @@ async function saveMemberWeeklyReport(memberId) {
   };
 
   // 1. Instant optimistic local update
-  const idx = weeklyReports.findIndex(r => r.week_id === currentReportWeekId && r.member_id === memberId);
+  localStorage.setItem('enex_weekly_seeded_v2', 'true');
+  const idx = weeklyReports.findIndex(r => 
+    r.week_id === currentReportWeekId && 
+    (r.member_id === memberId || (member.username && r.member_id === member.username) || r.id === repId)
+  );
   if (idx !== -1) {
     payload.notes = weeklyReports[idx].notes || '';
     weeklyReports[idx] = payload;
@@ -2360,13 +2411,16 @@ async function saveMemberWeeklyReport(memberId) {
   // 2. Sync to Supabase in background
   if (supabaseClient) {
     try {
-      await supabaseClient.from('weekly_reports').upsert([payload]);
+      const { error } = await supabaseClient.from('weekly_reports').upsert([payload]);
+      if (error) {
+        console.warn('Supabase weekly report sync notice:', error);
+      }
     } catch (err) {
-      console.warn('Supabase weekly report sync failed, kept in local state:', err);
+      console.warn('Supabase weekly report sync error:', err);
     }
   }
 
-  alert(`✅ [${member.name}] 님의 주간업무가 성공적으로 저장되었습니다!\n각 담당자별로 독립 저장되어 다른 팀원의 내용과 충돌 없이 안전하게 보관됩니다.`);
+  alert(`✅ [${member.name}] 님의 주간업무가 성공적으로 저장되었습니다!\n새로고침을 하거나 다른 브라우저 탭을 열어도 안전하게 보관됩니다.`);
 }
 
 async function saveWeeklyFreeNotes() {
@@ -2388,6 +2442,7 @@ async function saveWeeklyFreeNotes() {
     updated_at: new Date().toISOString()
   };
 
+  localStorage.setItem('enex_weekly_notes_seeded_v2', 'true');
   weeklyCommonNotes[currentReportWeekId] = payload;
   saveWeeklyLocalState();
 
@@ -2398,13 +2453,16 @@ async function saveWeeklyFreeNotes() {
 
   if (supabaseClient) {
     try {
-      await supabaseClient.from('weekly_common_notes').upsert([payload]);
+      const { error } = await supabaseClient.from('weekly_common_notes').upsert([payload]);
+      if (error) {
+        console.warn('Supabase weekly notes sync notice:', error);
+      }
     } catch (err) {
-      console.warn('Supabase weekly notes sync failed, kept in local state:', err);
+      console.warn('Supabase weekly notes sync error:', err);
     }
   }
 
-  alert('💾 구매부 주간 공통 특이사항 및 비고가 저장되었습니다.');
+  alert('💾 구매부 주간 공통 특이사항 및 비고가 저장되었습니다.\n새로고침 후에도 안전하게 유지됩니다.');
 }
 
 function promptEditMemberNote(memberId) {

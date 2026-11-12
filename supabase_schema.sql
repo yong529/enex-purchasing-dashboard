@@ -73,7 +73,7 @@ CREATE TABLE IF NOT EXISTS public.weekly_reports (
     id TEXT PRIMARY KEY, -- e.g. "report-{week_id}-{member_id}"
     week_id TEXT NOT NULL, -- e.g. "2026-W46"
     week_range TEXT NOT NULL, -- e.g. "2026.11.09 ~ 2026.11.13"
-    member_id TEXT REFERENCES public.members(id) ON DELETE CASCADE,
+    member_id TEXT,
     member_name TEXT,
     dept_label TEXT DEFAULT '구매부',
     plan_this_week TEXT DEFAULT '',
