@@ -25,19 +25,14 @@ function isLegacyDemo(m) {
   return false;
 }
 
-// Immediately purge any cached legacy demo sessions or old store keys from browser storage!
+// Immediately purge any cached sessions from persistent browser storage so fresh visits always start at the login screen!
 (function purgeLegacySessions() {
   try {
-    const cur = localStorage.getItem('enex_current_user_id');
-    if (cur && (LEGACY_MOCK_MEMBER_IDS.includes(cur) || cur === 'member-3')) {
-      localStorage.removeItem('enex_current_user_id');
-    }
-    // Migration flag: force clear old cache so demo accounts never resurrect
-    if (localStorage.getItem('enex_v4_purged_demo') !== 'true_v4') {
-      localStorage.removeItem('enex_current_user_id');
-      localStorage.removeItem('enex_dashboard_v3_state');
-      localStorage.removeItem('enex_dashboard_v4_clean');
-      localStorage.setItem('enex_v4_purged_demo', 'true_v4');
+    // Completely wipe persistent auto-login key from localStorage
+    localStorage.removeItem('enex_current_user_id');
+    const curSession = sessionStorage.getItem('enex_current_user_id');
+    if (curSession === 'admin-yong' || curSession === 'yong') {
+      sessionStorage.removeItem('enex_current_user_id');
     }
   } catch (e) {}
 })();
@@ -187,7 +182,8 @@ async function syncAuthUserWithProfile(authUser) {
   }
 
   currentUserId = member.id;
-  localStorage.setItem('enex_current_user_id', member.id);
+  sessionStorage.setItem('enex_current_user_id', member.id);
+  localStorage.removeItem('enex_current_user_id');
   expandedMemberIds.add(member.id);
   renderAll();
 }
@@ -298,23 +294,28 @@ async function fetchInitialData() {
 }
 
 function renderAll() {
-  const savedUser = localStorage.getItem('enex_current_user_id');
+  // Always wipe persistent localStorage login key so fresh visits always start with the login modal
+  localStorage.removeItem('enex_current_user_id');
+
+  const savedUser = sessionStorage.getItem('enex_current_user_id');
   if (
     savedUser && 
+    savedUser !== 'admin-yong' && 
+    (typeof ADMIN_USER === 'undefined' || savedUser !== ADMIN_USER.id) &&
     !LEGACY_MOCK_MEMBER_IDS.includes(savedUser) && 
     members.some(m => m.id === savedUser && !isLegacyDemo(m))
   ) {
     currentUserId = savedUser;
   } else {
     currentUserId = null;
-    localStorage.removeItem('enex_current_user_id');
+    sessionStorage.removeItem('enex_current_user_id');
   }
 
   if (currentUserId) {
     expandedMemberIds.add(currentUserId);
     closeLoginModal();
   } else {
-    // Initial view: show login modal on first visit!
+    // Initial view: show login modal on fresh visit!
     openLoginModal(true);
   }
 
@@ -361,7 +362,7 @@ function loadLocalState() {
 function saveLocalState() {
   try {
     localStorage.setItem('enex_dashboard_v4_clean', JSON.stringify({
-      members, tasks, directives, currentUserId
+      members, tasks, directives
     }));
   } catch (e) {}
 }
@@ -383,7 +384,13 @@ function populateCurrentUserSelect() {
 
 function changeCurrentUser(newId) {
   currentUserId = newId;
-  localStorage.setItem('enex_current_user_id', newId);
+  localStorage.removeItem('enex_current_user_id');
+  // Admin yong is never stored in sessionStorage across reloads; regular members stay in sessionStorage for the active tab
+  if (newId !== 'admin-yong' && (typeof ADMIN_USER === 'undefined' || newId !== ADMIN_USER.id)) {
+    sessionStorage.setItem('enex_current_user_id', newId);
+  } else {
+    sessionStorage.removeItem('enex_current_user_id');
+  }
   expandedMemberIds.add(newId);
 
   renderMyActionSection();
@@ -1524,6 +1531,7 @@ async function handleLogout() {
       await supabaseClient.auth.signOut();
     } catch (e) {}
   }
+  sessionStorage.removeItem('enex_current_user_id');
   localStorage.removeItem('enex_current_user_id');
   currentUserId = null;
   renderAll();
@@ -1636,7 +1644,8 @@ async function handleRegisterUser(e) {
       tasks.unshift(welcomeTask);
       expandedMemberIds.add(newId);
       currentUserId = newId;
-      localStorage.setItem('enex_current_user_id', newId);
+      sessionStorage.setItem('enex_current_user_id', newId);
+      localStorage.removeItem('enex_current_user_id');
       saveLocalState();
 
       closeRegisterModal();
@@ -1691,7 +1700,8 @@ async function handleRegisterUser(e) {
 
   saveLocalState();
   currentUserId = newId;
-  localStorage.setItem('enex_current_user_id', newId);
+  sessionStorage.setItem('enex_current_user_id', newId);
+  localStorage.removeItem('enex_current_user_id');
   closeRegisterModal();
   renderAll();
 
