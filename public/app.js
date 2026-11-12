@@ -294,21 +294,19 @@ async function fetchInitialData() {
 }
 
 function renderAll() {
-  // Always wipe persistent localStorage login key so fresh visits always start with the login modal
+  // Always wipe persistent localStorage login key so fresh visits in new tabs always require login
   localStorage.removeItem('enex_current_user_id');
 
-  const savedUser = sessionStorage.getItem('enex_current_user_id');
-  if (
-    savedUser && 
-    savedUser !== 'admin-yong' && 
-    (typeof ADMIN_USER === 'undefined' || savedUser !== ADMIN_USER.id) &&
-    !LEGACY_MOCK_MEMBER_IDS.includes(savedUser) && 
-    members.some(m => m.id === savedUser && !isLegacyDemo(m))
-  ) {
-    currentUserId = savedUser;
-  } else {
-    currentUserId = null;
-    sessionStorage.removeItem('enex_current_user_id');
+  // If currentUserId is not set in memory, check if active tab has a session in sessionStorage
+  if (!currentUserId) {
+    const savedUser = sessionStorage.getItem('enex_current_user_id');
+    if (
+      savedUser && 
+      !LEGACY_MOCK_MEMBER_IDS.includes(savedUser) && 
+      members.some(m => m.id === savedUser && !isLegacyDemo(m))
+    ) {
+      currentUserId = savedUser;
+    }
   }
 
   if (currentUserId) {
@@ -385,13 +383,12 @@ function populateCurrentUserSelect() {
 function changeCurrentUser(newId) {
   currentUserId = newId;
   localStorage.removeItem('enex_current_user_id');
-  // Admin yong is never stored in sessionStorage across reloads; regular members stay in sessionStorage for the active tab
-  if (newId !== 'admin-yong' && (typeof ADMIN_USER === 'undefined' || newId !== ADMIN_USER.id)) {
+  if (newId) {
     sessionStorage.setItem('enex_current_user_id', newId);
+    expandedMemberIds.add(newId);
   } else {
     sessionStorage.removeItem('enex_current_user_id');
   }
-  expandedMemberIds.add(newId);
 
   renderMyActionSection();
   renderDirectivesFeed();
@@ -674,11 +671,22 @@ function closeDirectiveModal() {
 
 async function handleCreateDirective(e) {
   e.preventDefault();
+  if (!currentUserId) {
+    alert('로그인 후 지시사항을 등록하실 수 있습니다.');
+    openLoginModal(true);
+    return;
+  }
+
   const issuer_id = currentUserId;
   const target_id = document.getElementById('directive-target-select').value;
   const title = document.getElementById('directive-title').value.trim();
   const content = document.getElementById('directive-content').value.trim();
-  const priority = document.getElementById('directive-priority').value;
+  const priority = document.getElementById('directive-priority').value || 'urgent';
+
+  if (!title || !content) {
+    alert('제목과 세부 지시 내용을 모두 입력해 주세요.');
+    return;
+  }
 
   const newDir = {
     id: `dir-${Date.now()}`,
@@ -691,42 +699,65 @@ async function handleCreateDirective(e) {
     created_at: new Date().toISOString()
   };
 
-  // Supabase save
-  if (supabaseClient) {
-    try {
-      const { data, error } = await supabaseClient.from('directives').insert([newDir]).select();
-      if (!error && data) {
-        directives.unshift(data[0]);
-      }
-    } catch (err) {
-      console.error(err);
-    }
-  } else {
-    // API or local fallback
-    try {
-      const res = await fetch('/api/directives', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newDir)
-      });
-      if (res.ok) {
-        const created = await res.json();
-        directives.unshift(created);
-      } else {
-        directives.unshift(newDir);
-        saveLocalState();
-      }
-    } catch (err) {
-      directives.unshift(newDir);
-      saveLocalState();
-    }
-  }
+  // 1. Instant optimistic update: add to state & localStorage immediately!
+  directives.unshift(newDir);
+  saveLocalState();
 
   closeDirectiveModal();
   if (!isDirectivesFeedOpen) toggleDirectivesFeed();
 
   renderMyActionSection();
   renderDirectivesFeed();
+
+  // 2. Sync to Supabase in background
+  if (supabaseClient) {
+    try {
+      // Ensure issuer member exists in Supabase members table to satisfy foreign key constraint
+      const curMember = members.find(m => m.id === currentUserId);
+      if (curMember) {
+        try {
+          await supabaseClient.from('members').upsert([{
+            id: curMember.id,
+            username: curMember.username || curMember.id,
+            name: curMember.name,
+            title: curMember.title,
+            role: curMember.role,
+            icon: curMember.icon || '👤',
+            color: curMember.color || 'blue'
+          }]);
+        } catch (e) {}
+      }
+
+      const dbPayload = {
+        id: newDir.id,
+        issuer_id: newDir.issuer_id,
+        target_id: newDir.target_id,
+        title: newDir.title,
+        content: newDir.content,
+        priority: newDir.priority,
+        status: newDir.status,
+        created_at: newDir.created_at
+      };
+
+      const { data, error } = await supabaseClient.from('directives').insert([dbPayload]).select();
+      if (error) {
+        console.warn('Supabase directive insert error, retrying with nullable issuer:', error);
+        // If FK constraint fails on issuer_id, retry with issuer_id = null
+        if (error.code === '23503' || String(error.message).includes('foreign key')) {
+          dbPayload.issuer_id = null;
+          await supabaseClient.from('directives').insert([dbPayload]);
+        }
+      } else if (data && data[0]) {
+        const idx = directives.findIndex(d => d.id === newDir.id);
+        if (idx !== -1) {
+          directives[idx] = data[0];
+          saveLocalState();
+        }
+      }
+    } catch (err) {
+      console.warn('Supabase directive sync failed, kept in local state:', err);
+    }
+  }
 }
 
 async function toggleDirectiveStatus(dirId) {
@@ -743,21 +774,16 @@ async function toggleDirectiveStatus(dirId) {
 
   const newStatus = directive.status === 'completed' ? 'pending' : 'completed';
   directive.status = newStatus;
+  saveLocalState();
 
   renderMyActionSection();
   renderDirectivesFeed();
 
   if (supabaseClient) {
-    await supabaseClient.from('directives').update({ status: newStatus }).eq('id', dirId);
-  } else {
     try {
-      await fetch(`/api/directives/${dirId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: newStatus })
-      });
+      await supabaseClient.from('directives').update({ status: newStatus }).eq('id', dirId);
     } catch (err) {
-      saveLocalState();
+      console.warn('Supabase directive toggle error:', err);
     }
   }
 }
@@ -773,16 +799,16 @@ async function deleteDirective(dirId) {
 
   if (!confirm('이 지시사항을 삭제하시겠습니까?')) return;
   directives = directives.filter(item => item.id !== dirId);
+  saveLocalState();
+
   renderMyActionSection();
   renderDirectivesFeed();
 
   if (supabaseClient) {
-    await supabaseClient.from('directives').delete().eq('id', dirId);
-  } else {
     try {
-      await fetch(`/api/directives/${dirId}`, { method: 'DELETE' });
+      await supabaseClient.from('directives').delete().eq('id', dirId);
     } catch (err) {
-      saveLocalState();
+      console.warn('Supabase directive delete error:', err);
     }
   }
 }
@@ -896,7 +922,7 @@ function renderMembersAccordion() {
           badge = `<span class="text-[10px] px-2 py-0.5 rounded bg-blue-50 text-blue-700 font-medium">마감: ${t.deadline}</span>`;
         }
 
-        const isTaskOwner = t.member_id === currentUserId || (t.created_by && t.created_by === currentUserId);
+        const isTaskOwner = t.member_id === currentUserId;
         const canDeleteTask = isCurAdmin || isTaskOwner;
         const canToggleTask = isCurAdmin || isTaskOwner;
 
@@ -1011,6 +1037,12 @@ function toggleAllAccordions() {
 // In-line Task Add
 async function handleQuickAddTask(e, memberId) {
   e.preventDefault();
+  if (!currentUserId) {
+    alert('로그인 후 업무를 등록하실 수 있습니다.');
+    openLoginModal(true);
+    return;
+  }
+
   const isCurAdmin = checkIsAdmin();
   if (!isCurAdmin && memberId !== currentUserId) {
     alert('본인의 업무만 등록할 수 있습니다.');
@@ -1019,8 +1051,10 @@ async function handleQuickAddTask(e, memberId) {
 
   const form = e.target;
   const title = form.querySelector('.quick-task-title').value.trim();
-  const deadline = form.querySelector('.quick-task-deadline').value;
-  const priority = form.querySelector('.quick-task-priority').value;
+  const deadline = form.querySelector('.quick-task-deadline').value || formatDate(today);
+  const priority = form.querySelector('.quick-task-priority').value || 'normal';
+
+  if (!title) return;
 
   const newTask = {
     id: `task-${Date.now()}`,
@@ -1030,41 +1064,45 @@ async function handleQuickAddTask(e, memberId) {
     priority,
     memo: '',
     is_completed: false,
-    created_by: currentUserId,
     created_at: new Date().toISOString()
   };
 
-  if (supabaseClient) {
-    try {
-      const { data, error } = await supabaseClient.from('tasks').insert([newTask]).select();
-      if (!error && data) tasks.unshift(data[0]);
-    } catch (err) {
-      tasks.unshift(newTask);
-    }
-  } else {
-    try {
-      const res = await fetch('/api/tasks', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newTask)
-      });
-      if (res.ok) {
-        const created = await res.json();
-        tasks.unshift(created);
-      } else {
-        tasks.unshift(newTask);
-        saveLocalState();
-      }
-    } catch (err) {
-      tasks.unshift(newTask);
-      saveLocalState();
-    }
-  }
-
+  // 1. Instant optimistic update: add to state & localStorage immediately!
+  tasks.unshift(newTask);
+  saveLocalState();
   form.reset();
+
   renderMyActionSection();
   renderMembersAccordion();
   renderCalendar();
+
+  // 2. Sync to Supabase in background
+  if (supabaseClient) {
+    try {
+      const dbPayload = {
+        id: newTask.id,
+        member_id: newTask.member_id,
+        title: newTask.title,
+        deadline: newTask.deadline,
+        priority: newTask.priority,
+        memo: '',
+        is_completed: false,
+        created_at: newTask.created_at
+      };
+      const { data, error } = await supabaseClient.from('tasks').insert([dbPayload]).select();
+      if (error) {
+        console.warn('Supabase task insert warning:', error);
+      } else if (data && data[0]) {
+        const idx = tasks.findIndex(t => t.id === newTask.id);
+        if (idx !== -1) {
+          tasks[idx] = data[0];
+          saveLocalState();
+        }
+      }
+    } catch (err) {
+      console.warn('Supabase task sync failed, kept in local state:', err);
+    }
+  }
 }
 
 async function toggleTask(taskId) {
@@ -1072,7 +1110,7 @@ async function toggleTask(taskId) {
   if (!task) return;
 
   const isCurAdmin = checkIsAdmin();
-  const isOwner = task.member_id === currentUserId || (task.created_by && task.created_by === currentUserId);
+  const isOwner = task.member_id === currentUserId;
   if (!isCurAdmin && !isOwner) {
     alert('본인에게 배정된 할 일만 완료 상태를 변경할 수 있습니다.');
     return;
@@ -1080,22 +1118,17 @@ async function toggleTask(taskId) {
 
   const newStatus = !task.is_completed;
   task.is_completed = newStatus;
+  saveLocalState();
 
   renderMyActionSection();
   renderMembersAccordion();
   renderCalendar();
 
   if (supabaseClient) {
-    await supabaseClient.from('tasks').update({ is_completed: newStatus }).eq('id', taskId);
-  } else {
     try {
-      await fetch(`/api/tasks/${taskId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ is_completed: newStatus })
-      });
+      await supabaseClient.from('tasks').update({ is_completed: newStatus }).eq('id', taskId);
     } catch (err) {
-      saveLocalState();
+      console.warn('Supabase task toggle error:', err);
     }
   }
 }
@@ -1103,7 +1136,7 @@ async function toggleTask(taskId) {
 async function deleteTask(taskId) {
   const task = tasks.find(t => t.id === taskId);
   const isCurAdmin = checkIsAdmin();
-  const isOwner = task && (task.member_id === currentUserId || (task.created_by && task.created_by === currentUserId));
+  const isOwner = task && task.member_id === currentUserId;
   if (!isCurAdmin && !isOwner) {
     alert('본인의 할 일만 삭제할 수 있습니다.');
     return;
@@ -1111,17 +1144,17 @@ async function deleteTask(taskId) {
 
   if (!confirm('이 할 일을 삭제하시겠습니까?')) return;
   tasks = tasks.filter(t => t.id !== taskId);
+  saveLocalState();
+
   renderMyActionSection();
   renderMembersAccordion();
   renderCalendar();
 
   if (supabaseClient) {
-    await supabaseClient.from('tasks').delete().eq('id', taskId);
-  } else {
     try {
-      await fetch(`/api/tasks/${taskId}`, { method: 'DELETE' });
+      await supabaseClient.from('tasks').delete().eq('id', taskId);
     } catch (err) {
-      saveLocalState();
+      console.warn('Supabase task delete error:', err);
     }
   }
 }
