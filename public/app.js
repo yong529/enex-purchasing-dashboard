@@ -85,6 +85,25 @@ const DEFAULT_MEMBERS = [ADMIN_USER];
 const DEFAULT_TASKS = [];
 const DEFAULT_DIRECTIVES = [];
 
+// Helper to determine if current logged-in user has system admin permissions
+function checkIsAdmin() {
+  if (!currentUserId) return false;
+  if (currentUserId === 'admin-yong' || (typeof ADMIN_USER !== 'undefined' && currentUserId === ADMIN_USER.id)) return true;
+  const cur = members.find(m => m.id === currentUserId);
+  if (!cur) return false;
+  return cur.username === 'yong' || cur.id === 'admin-yong' || cur.is_admin === true;
+}
+
+// Helper to retrieve only regular purchasing team members (excluding backend admin and legacy demos)
+function getTeamMembers() {
+  return members.filter(m => 
+    m.username !== 'yong' && 
+    m.id !== 'admin-yong' && 
+    !m.is_admin && 
+    !isLegacyDemo(m)
+  );
+}
+
 // ==================== SUPABASE INITIALIZATION ====================
 
 function initSupabase() {
@@ -383,7 +402,7 @@ function renderMyActionSection() {
   const supabaseBtn = document.getElementById('header-supabase-btn');
 
   if (curMember) {
-    const isAdmin = curMember.username === 'yong' || curMember.is_admin === true;
+    const isAdmin = checkIsAdmin();
     if (headerAvatar) headerAvatar.textContent = curMember.icon || '👤';
     if (headerName) {
       headerName.innerHTML = `${curMember.name} (${curMember.title})${isAdmin ? ' <span class="text-[9px] bg-amber-100 text-amber-800 font-bold px-1.5 py-0.2 rounded border border-amber-300">관리자</span>' : ''}`;
@@ -400,7 +419,11 @@ function renderMyActionSection() {
 
     document.getElementById('my-profile-greeting').textContent = `환영합니다, ${curMember.name} ${curMember.title}님!`;
     document.getElementById('my-profile-avatar').textContent = curMember.icon || '👤';
-    document.getElementById('my-profile-summary').textContent = `현재 [${curMember.name}] 계정으로 접속 중입니다. 오늘 확인할 긴급 지시사항 및 마감 할 일입니다.`;
+    if (isAdmin) {
+      document.getElementById('my-profile-summary').textContent = `현재 시스템 총괄 관리자 모드로 접속 중입니다. 전체 업무 및 계정 관리 마스터 권한이 부여되어 있습니다.`;
+    } else {
+      document.getElementById('my-profile-summary').textContent = `현재 [${curMember.name}] 계정으로 접속 중입니다. 오늘 확인할 긴급 지시사항 및 마감 할 일입니다.`;
+    }
   } else {
     // Not logged in
     if (headerAvatar) headerAvatar.textContent = '👤';
@@ -412,7 +435,12 @@ function renderMyActionSection() {
     document.getElementById('my-profile-summary').textContent = `상단의 [계정 전환]을 누르시거나 로그인 창에서 계정을 인증해 주세요.`;
   }
 
-  const myDirectives = curMember ? directives.filter(d => d.target_id === currentUserId || d.target_id === 'all') : [];
+  const isUserAdmin = checkIsAdmin();
+  const myDirectives = curMember 
+    ? (isUserAdmin 
+        ? directives 
+        : directives.filter(d => d.target_id === currentUserId || d.target_id === 'all' || d.issuer_id === currentUserId))
+    : [];
   const myPendingDirectives = myDirectives.filter(d => d.status !== 'completed');
 
   document.getElementById('my-directives-count').textContent = `${myPendingDirectives.length}건 대기`;
@@ -548,11 +576,35 @@ function renderDirectivesFeed() {
       : (members.find(m => m.id === d.target_id) || { name: '담당자', title: '', icon: '👤' });
 
     const isCompleted = d.status === 'completed';
+    const isCurAdmin = checkIsAdmin();
+    const isOwner = d.issuer_id === currentUserId;
+    const canDelete = isCurAdmin || isOwner;
+    const canToggle = isCurAdmin || isOwner || d.target_id === 'all' || d.target_id === currentUserId;
 
     const card = document.createElement('div');
     card.className = `p-3.5 rounded-xl border bg-white transition flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
       isCompleted ? 'border-slate-200 opacity-60' : 'border-slate-200 hover:border-blue-300 shadow-2xs'
     }`;
+
+    const deleteBtnHtml = canDelete ? `
+      <button onclick="deleteDirective('${d.id}')" class="p-1.5 text-slate-300 hover:text-red-500 rounded-lg transition" title="지시사항 삭제 (작성자/관리자 전용)">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+      </button>
+    ` : '';
+
+    const toggleBtnHtml = canToggle ? `
+      <button onclick="toggleDirectiveStatus('${d.id}')" class="text-xs font-semibold px-3 py-1.5 rounded-xl border transition ${
+        isCompleted 
+          ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+          : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
+      }">
+        ${isCompleted ? '✓ 처리 완료됨' : '처리 확인'}
+      </button>
+    ` : `
+      <button disabled class="text-xs font-medium px-3 py-1.5 rounded-xl border bg-slate-50 text-slate-400 border-slate-200 cursor-not-allowed opacity-60">
+        ${isCompleted ? '✓ 처리 완료됨' : '처리 확인'}
+      </button>
+    `;
 
     card.innerHTML = `
       <div class="space-y-1">
@@ -574,16 +626,8 @@ function renderDirectivesFeed() {
       </div>
 
       <div class="shrink-0 flex items-center gap-2">
-        <button onclick="toggleDirectiveStatus('${d.id}')" class="text-xs font-semibold px-3 py-1.5 rounded-xl border transition ${
-          isCompleted 
-            ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
-            : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
-        }">
-          ${isCompleted ? '✓ 처리 완료됨' : '처리 확인'}
-        </button>
-        <button onclick="deleteDirective('${d.id}')" class="p-1.5 text-slate-300 hover:text-red-500 rounded-lg transition" title="삭제">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
-        </button>
+        ${toggleBtnHtml}
+        ${deleteBtnHtml}
       </div>
     `;
 
@@ -595,7 +639,8 @@ function populateDirectiveTargetSelect() {
   const sel = document.getElementById('directive-target-select');
   if (!sel) return;
   sel.innerHTML = '<option value="all">전체 공지 (구매부 전원)</option>';
-  members.forEach(m => {
+  const teamMembers = getTeamMembers();
+  teamMembers.forEach(m => {
     const opt = document.createElement('option');
     opt.value = m.id;
     opt.textContent = `${m.name} (${m.title} - ${m.role.substring(0, 18)}...)`;
@@ -604,7 +649,12 @@ function populateDirectiveTargetSelect() {
 }
 
 function openDirectiveModal() {
-  const curMember = members.find(m => m.id === currentUserId) || { name: '김차장', title: '차장' };
+  if (!currentUserId) {
+    alert('로그인 후 지시사항을 등록하실 수 있습니다.');
+    openLoginModal(true);
+    return;
+  }
+  const curMember = members.find(m => m.id === currentUserId) || { name: '담당자', title: '' };
   document.getElementById('directive-issuer-display').value = `${curMember.name} (${curMember.title})`;
   populateDirectiveTargetSelect();
   document.getElementById('directive-modal').classList.remove('hidden');
@@ -676,6 +726,14 @@ async function toggleDirectiveStatus(dirId) {
   const directive = directives.find(d => d.id === dirId);
   if (!directive) return;
 
+  const isCurAdmin = checkIsAdmin();
+  const isTarget = directive.target_id === 'all' || directive.target_id === currentUserId;
+  const isIssuer = directive.issuer_id === currentUserId;
+  if (!isCurAdmin && !isTarget && !isIssuer) {
+    alert('해당 지시사항의 수신자 또는 시스템 관리자만 처리 상태를 변경할 수 있습니다.');
+    return;
+  }
+
   const newStatus = directive.status === 'completed' ? 'pending' : 'completed';
   directive.status = newStatus;
 
@@ -698,8 +756,16 @@ async function toggleDirectiveStatus(dirId) {
 }
 
 async function deleteDirective(dirId) {
+  const d = directives.find(item => item.id === dirId);
+  const isCurAdmin = checkIsAdmin();
+  const isOwner = d && d.issuer_id === currentUserId;
+  if (!isCurAdmin && !isOwner) {
+    alert('본인이 등록한 지시사항만 삭제할 수 있습니다.');
+    return;
+  }
+
   if (!confirm('이 지시사항을 삭제하시겠습니까?')) return;
-  directives = directives.filter(d => d.id !== dirId);
+  directives = directives.filter(item => item.id !== dirId);
   renderMyActionSection();
   renderDirectivesFeed();
 
@@ -719,10 +785,23 @@ async function deleteDirective(dirId) {
 function renderMembersAccordion() {
   const container = document.getElementById('members-accordion-container');
   container.innerHTML = '';
-  members.sort((a, b) => (a.order_num || 0) - (b.order_num || 0));
+  
+  const isCurAdmin = checkIsAdmin();
+  const teamMembers = getTeamMembers();
+  teamMembers.sort((a, b) => (a.order_num || 0) - (b.order_num || 0));
   const todayStr = formatDate(today);
 
-  members.forEach(m => {
+  if (teamMembers.length === 0) {
+    container.innerHTML = `
+      <div class="py-12 px-4 text-center bg-white rounded-2xl border border-slate-200/80 shadow-xs space-y-2">
+        <p class="text-sm font-bold text-slate-700">등록된 팀원이 없습니다.</p>
+        <p class="text-xs text-slate-400">상단의 <span class="font-semibold text-blue-600">[+ 팀원 계정 등록]</span> 버튼을 눌러 새 팀원을 등록하세요.</p>
+      </div>
+    `;
+    return;
+  }
+
+  teamMembers.forEach(m => {
     const theme = COLOR_THEMES[m.color] || COLOR_THEMES.blue;
     let memberTasks = tasks.filter(t => t.member_id === m.id);
 
@@ -733,6 +812,7 @@ function renderMembersAccordion() {
     const pendingCount = memberTasks.filter(t => !t.is_completed).length;
     const isExpanded = expandedMemberIds.has(m.id);
     const isCurrentUser = m.id === currentUserId;
+    const canManageMember = isCurAdmin || isCurrentUser;
 
     memberTasks.sort((a, b) => {
       if (a.is_completed !== b.is_completed) return a.is_completed ? 1 : -1;
@@ -746,6 +826,14 @@ function renderMembersAccordion() {
         ? 'ring-2 ring-blue-500/40 border-blue-500' 
         : (isExpanded ? 'border-slate-300 ring-1 ring-slate-200' : 'border-slate-200/80 hover:border-slate-300')
     }`;
+
+    const headerEditBtn = canManageMember ? `
+      <button onclick="event.stopPropagation(); openEditMemberModal('${m.id}')" 
+        class="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-slate-100 rounded-lg transition" 
+        title="${isCurAdmin && !isCurrentUser ? '팀원 관리 및 삭제 (총괄 관리자)' : '내 프로필 및 역할 수정'}">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
+      </button>
+    ` : '';
 
     const headerHtml = `
       <div onclick="toggleMemberDropdown('${m.id}')" 
@@ -774,10 +862,7 @@ function renderMembersAccordion() {
           <span class="text-xs font-bold px-2.5 py-1 rounded-xl ${pendingCount > 0 ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-slate-100 text-slate-500'}">
             진행중 ${pendingCount}건
           </span>
-          <button onclick="event.stopPropagation(); openEditMemberModal('${m.id}')" 
-            class="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-slate-100 rounded-lg transition" title="담당자 및 역할 수정">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
-          </button>
+          ${headerEditBtn}
           <div class="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 bg-slate-50 border border-slate-200/80 transition transform ${isExpanded ? 'rotate-180 bg-blue-50 text-blue-600 border-blue-200' : ''}">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
           </div>
@@ -787,7 +872,7 @@ function renderMembersAccordion() {
 
     let tasksListHtml = '';
     if (memberTasks.length === 0) {
-      tasksListHtml = `<div class="py-6 text-center text-slate-400 text-xs">등록된 할 일이 없습니다. 아래에서 새 작업을 추가해 보세요.</div>`;
+      tasksListHtml = `<div class="py-6 text-center text-slate-400 text-xs">등록된 할 일이 없습니다.</div>`;
     } else {
       tasksListHtml = memberTasks.map(t => {
         const isOverdue = !t.is_completed && t.deadline < todayStr;
@@ -804,13 +889,25 @@ function renderMembersAccordion() {
           badge = `<span class="text-[10px] px-2 py-0.5 rounded bg-blue-50 text-blue-700 font-medium">마감: ${t.deadline}</span>`;
         }
 
+        const isTaskOwner = t.member_id === currentUserId || (t.created_by && t.created_by === currentUserId);
+        const canDeleteTask = isCurAdmin || isTaskOwner;
+        const canToggleTask = isCurAdmin || isTaskOwner;
+
+        const taskDeleteBtnHtml = canDeleteTask ? `
+          <button onclick="deleteTask('${t.id}')" class="p-1 text-slate-300 hover:text-red-500 rounded transition shrink-0" title="할 일 삭제 (작성자/관리자 전용)">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+          </button>
+        ` : '';
+
         return `
           <div class="p-3 rounded-xl border transition flex items-start justify-between gap-3 ${
             t.is_completed ? 'bg-slate-50/60 border-slate-200/60 opacity-60' : 'bg-white border-slate-200/80 hover:border-blue-300'
           }">
             <div class="flex items-start gap-2.5">
-              <input type="checkbox" ${t.is_completed ? 'checked' : ''} onchange="toggleTask('${t.id}')" 
-                class="mt-1 w-4 h-4 rounded text-blue-600 focus:ring-blue-500 cursor-pointer accent-blue-600">
+              <input type="checkbox" ${t.is_completed ? 'checked' : ''} 
+                ${canToggleTask ? '' : 'disabled title="본인 할 일만 체크 가능"'} 
+                onchange="toggleTask('${t.id}')" 
+                class="mt-1 w-4 h-4 rounded text-blue-600 focus:ring-blue-500 accent-blue-600 ${canToggleTask ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'}">
               <div class="space-y-0.5">
                 <div class="flex items-center gap-1.5">
                   ${badge}
@@ -822,13 +919,41 @@ function renderMembersAccordion() {
                 ${t.memo ? `<p class="text-[11px] text-slate-500">${t.memo}</p>` : ''}
               </div>
             </div>
-            <button onclick="deleteTask('${t.id}')" class="p-1 text-slate-300 hover:text-red-500 rounded transition shrink-0" title="삭제">
-              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
-            </button>
+            ${taskDeleteBtnHtml}
           </div>
         `;
       }).join('');
     }
+
+    const dropdownRoleEditBtn = canManageMember ? `
+      <button onclick="openEditMemberModal('${m.id}')" class="text-blue-600 hover:text-blue-800 font-semibold text-right shrink-0">
+        ${isCurAdmin && !isCurrentUser ? '관리자 수정/삭제 &rarr;' : '역할 수정 &rarr;'}
+      </button>
+    ` : '';
+
+    const canAddTask = isCurAdmin || isCurrentUser;
+    const taskFormHtml = canAddTask ? `
+      <form onsubmit="handleQuickAddTask(event, '${m.id}')" class="pt-2 border-t border-slate-200/60 flex flex-col sm:flex-row items-center gap-2">
+        <input type="text" placeholder="${m.name}의 새 할 일 입력..." required 
+          class="quick-task-title flex-1 w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+        <div class="flex items-center gap-2 w-full sm:w-auto">
+          <input type="date" value="${formatDate(today)}" required title="마감일"
+            class="quick-task-deadline bg-white border border-slate-200 rounded-xl px-2.5 py-2 text-xs text-slate-700 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+          <select class="quick-task-priority bg-white border border-slate-200 rounded-xl px-2 py-2 text-xs text-slate-700 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+            <option value="urgent">긴급</option>
+            <option value="normal" selected>보통</option>
+            <option value="low">낮음</option>
+          </select>
+          <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs px-3.5 py-2 rounded-xl shrink-0 transition shadow-xs">
+            + 등록
+          </button>
+        </div>
+      </form>
+    ` : `
+      <div class="pt-2 border-t border-slate-200/60 text-center text-[11px] text-slate-400">
+        🔒 해당 담당자 또는 총괄 관리자만 새 작업을 등록할 수 있습니다.
+      </div>
+    `;
 
     const dropdownHtml = `
       <div class="${isExpanded ? 'block' : 'hidden'} border-t border-slate-100 bg-slate-50/50 p-4 space-y-3.5">
@@ -837,31 +962,14 @@ function renderMembersAccordion() {
             <span class="font-bold text-slate-700">📌 전담 업무:</span>
             <span class="text-slate-600 font-medium">${m.role}</span>
           </div>
-          <button onclick="openEditMemberModal('${m.id}')" class="text-blue-600 hover:text-blue-800 font-semibold text-right shrink-0">
-            역할 수정 &rarr;
-          </button>
+          ${dropdownRoleEditBtn}
         </div>
 
         <div class="space-y-2">
           ${tasksListHtml}
         </div>
 
-        <form onsubmit="handleQuickAddTask(event, '${m.id}')" class="pt-2 border-t border-slate-200/60 flex flex-col sm:flex-row items-center gap-2">
-          <input type="text" placeholder="${m.name}의 새 할 일 입력..." required 
-            class="quick-task-title flex-1 w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none">
-          <div class="flex items-center gap-2 w-full sm:w-auto">
-            <input type="date" value="${formatDate(today)}" required title="마감일"
-              class="quick-task-deadline bg-white border border-slate-200 rounded-xl px-2.5 py-2 text-xs text-slate-700 focus:ring-2 focus:ring-blue-500 focus:outline-none">
-            <select class="quick-task-priority bg-white border border-slate-200 rounded-xl px-2 py-2 text-xs text-slate-700 focus:ring-2 focus:ring-blue-500 focus:outline-none">
-              <option value="urgent">긴급</option>
-              <option value="normal" selected>보통</option>
-              <option value="low">낮음</option>
-            </select>
-            <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs px-3.5 py-2 rounded-xl shrink-0 transition shadow-xs">
-              + 등록
-            </button>
-          </div>
-        </form>
+        ${taskFormHtml}
       </div>
     `;
 
@@ -881,11 +989,13 @@ function toggleMemberDropdown(memberId) {
 
 function toggleAllAccordions() {
   const btn = document.getElementById('btn-toggle-all');
-  if (expandedMemberIds.size === members.length) {
+  const teamMembers = getTeamMembers();
+  if (teamMembers.length === 0) return;
+  if (expandedMemberIds.size >= teamMembers.length) {
     expandedMemberIds.clear();
     btn.textContent = "전체 펼치기";
   } else {
-    members.forEach(m => expandedMemberIds.add(m.id));
+    teamMembers.forEach(m => expandedMemberIds.add(m.id));
     btn.textContent = "전체 접기";
   }
   renderMembersAccordion();
@@ -894,6 +1004,12 @@ function toggleAllAccordions() {
 // In-line Task Add
 async function handleQuickAddTask(e, memberId) {
   e.preventDefault();
+  const isCurAdmin = checkIsAdmin();
+  if (!isCurAdmin && memberId !== currentUserId) {
+    alert('본인의 업무만 등록할 수 있습니다.');
+    return;
+  }
+
   const form = e.target;
   const title = form.querySelector('.quick-task-title').value.trim();
   const deadline = form.querySelector('.quick-task-deadline').value;
@@ -907,6 +1023,7 @@ async function handleQuickAddTask(e, memberId) {
     priority,
     memo: '',
     is_completed: false,
+    created_by: currentUserId,
     created_at: new Date().toISOString()
   };
 
@@ -947,6 +1064,13 @@ async function toggleTask(taskId) {
   const task = tasks.find(t => t.id === taskId);
   if (!task) return;
 
+  const isCurAdmin = checkIsAdmin();
+  const isOwner = task.member_id === currentUserId || (task.created_by && task.created_by === currentUserId);
+  if (!isCurAdmin && !isOwner) {
+    alert('본인에게 배정된 할 일만 완료 상태를 변경할 수 있습니다.');
+    return;
+  }
+
   const newStatus = !task.is_completed;
   task.is_completed = newStatus;
 
@@ -970,6 +1094,14 @@ async function toggleTask(taskId) {
 }
 
 async function deleteTask(taskId) {
+  const task = tasks.find(t => t.id === taskId);
+  const isCurAdmin = checkIsAdmin();
+  const isOwner = task && (task.member_id === currentUserId || (task.created_by && task.created_by === currentUserId));
+  if (!isCurAdmin && !isOwner) {
+    alert('본인의 할 일만 삭제할 수 있습니다.');
+    return;
+  }
+
   if (!confirm('이 할 일을 삭제하시겠습니까?')) return;
   tasks = tasks.filter(t => t.id !== taskId);
   renderMyActionSection();
@@ -990,6 +1122,11 @@ async function deleteTask(taskId) {
 // ==================== EDIT MEMBER MODAL ====================
 
 function openEditMemberModal(memberId) {
+  const isCurAdmin = checkIsAdmin();
+  if (!isCurAdmin && memberId !== currentUserId) {
+    alert('본인의 프로필만 수정할 수 있습니다.');
+    return;
+  }
   const m = members.find(x => x.id === memberId);
   if (!m) return;
   document.getElementById('edit-member-id').value = m.id;
@@ -998,7 +1135,18 @@ function openEditMemberModal(memberId) {
   document.getElementById('edit-member-role').value = m.role || '';
   document.getElementById('edit-member-icon').value = m.icon || '👤';
   document.getElementById('edit-member-color').value = m.color || 'blue';
-  document.getElementById('modal-edit-member-heading').textContent = `${m.name} 정보 및 역할 수정`;
+  document.getElementById('modal-edit-member-heading').textContent = `${m.name} 정보 및 역할 수정${isCurAdmin && m.id !== currentUserId ? ' (관리자 모드)' : ''}`;
+
+  // Toggle Delete Member button (Visible ONLY to admin for regular members, never for admin itself)
+  const delBtn = document.getElementById('btn-delete-member');
+  if (delBtn) {
+    if (isCurAdmin && m.id !== 'admin-yong' && m.username !== 'yong' && !m.is_admin) {
+      delBtn.classList.remove('hidden');
+    } else {
+      delBtn.classList.add('hidden');
+    }
+  }
+
   document.getElementById('edit-member-modal').classList.remove('hidden');
 }
 
@@ -1010,11 +1158,17 @@ function openAddMemberModal() {
   document.getElementById('edit-member-icon').value = '👤';
   document.getElementById('edit-member-color').value = 'blue';
   document.getElementById('modal-edit-member-heading').textContent = '새 구매 담당자 추가';
+
+  const delBtn = document.getElementById('btn-delete-member');
+  if (delBtn) delBtn.classList.add('hidden');
+
   document.getElementById('edit-member-modal').classList.remove('hidden');
 }
 
 function closeEditMemberModal() {
   document.getElementById('edit-member-modal').classList.add('hidden');
+  const delBtn = document.getElementById('btn-delete-member');
+  if (delBtn) delBtn.classList.add('hidden');
   document.getElementById('edit-member-form').reset();
 }
 
@@ -1025,6 +1179,12 @@ function setEditIcon(icon) {
 async function handleSaveMember(e) {
   e.preventDefault();
   const id = document.getElementById('edit-member-id').value;
+  const isCurAdmin = checkIsAdmin();
+  if (id && !isCurAdmin && id !== currentUserId) {
+    alert('본인의 프로필만 수정할 수 있습니다.');
+    return;
+  }
+
   const title = document.getElementById('edit-member-title').value.trim();
   const name = document.getElementById('edit-member-name').value.trim();
   const role = document.getElementById('edit-member-role').value.trim();
@@ -1081,6 +1241,7 @@ async function handleSaveMember(e) {
     }
   }
 
+  saveLocalState();
   closeEditMemberModal();
   populateCurrentUserSelect();
   populateDirectiveTargetSelect();
@@ -1088,6 +1249,64 @@ async function handleSaveMember(e) {
   renderMyActionSection();
   renderMembersAccordion();
   renderCalendar();
+}
+
+async function handleDeleteMemberClick() {
+  const isCurAdmin = checkIsAdmin();
+  if (!isCurAdmin) {
+    alert('팀원 계정 삭제는 시스템 총괄 관리자만 가능합니다.');
+    return;
+  }
+
+  const id = document.getElementById('edit-member-id').value;
+  if (!id) return;
+
+  const targetMember = members.find(m => m.id === id);
+  if (!targetMember) return;
+
+  if (targetMember.id === 'admin-yong' || targetMember.username === 'yong' || targetMember.is_admin) {
+    alert('총괄 관리자 계정은 삭제할 수 없습니다.');
+    return;
+  }
+
+  const confirmMsg = `정말 [${targetMember.name} (${targetMember.title})] 팀원 계정을 영구 삭제하시겠습니까?\n\n※ 해당 팀원에게 등록된 모든 할 일도 함께 삭제됩니다.`;
+  if (!confirm(confirmMsg)) return;
+
+  // 1. Remove from local state
+  members = members.filter(m => m.id !== id);
+  tasks = tasks.filter(t => t.member_id !== id);
+  expandedMemberIds.delete(id);
+
+  // If deleted member was current user, clear currentUserId
+  if (currentUserId === id) {
+    currentUserId = null;
+    localStorage.removeItem('enex_current_user_id');
+  }
+
+  // 2. Cascade delete from Supabase if connected
+  if (supabaseClient) {
+    try {
+      await supabaseClient.from('tasks').delete().eq('member_id', id);
+      await supabaseClient.from('members').delete().eq('id', id);
+      console.log('⚡ Member and associated tasks deleted from Supabase:', id);
+    } catch (err) {
+      console.error('Supabase deletion error:', err);
+    }
+  } else {
+    try {
+      await fetch(`/api/members/${id}`, { method: 'DELETE' });
+    } catch (err) {
+      // ignore
+    }
+  }
+
+  // 3. Persist local state
+  saveLocalState();
+
+  // 4. Close modal and re-render
+  closeEditMemberModal();
+  renderAll();
+  alert(`[${targetMember.name}] 팀원 계정이 성공적으로 삭제되었습니다.`);
 }
 
 // ==================== LOGIN & ACCOUNT SWITCHING ====================
@@ -1127,11 +1346,7 @@ function renderLoginAccountsList() {
   list.innerHTML = '';
 
   // Exclude admin and any legacy demo accounts from the regular members quick-select list
-  const regularMembers = members.filter(m => 
-    m.username !== 'yong' && 
-    m.id !== 'admin-yong' && 
-    !isLegacyDemo(m)
-  );
+  const regularMembers = getTeamMembers();
 
   if (regularMembers.length === 0) {
     list.innerHTML = `
@@ -1494,7 +1709,8 @@ function populateCalMemberFilter() {
   if (!sel) return;
   const currentVal = sel.value;
   sel.innerHTML = '<option value="all">전체 팀원 마감일</option>';
-  members.forEach(m => {
+  const teamMembers = getTeamMembers();
+  teamMembers.forEach(m => {
     const opt = document.createElement('option');
     opt.value = m.id;
     opt.textContent = `${m.name} (${m.title})`;

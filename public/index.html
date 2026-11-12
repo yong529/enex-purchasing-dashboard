@@ -514,9 +514,15 @@
             </select>
           </div>
         </div>
-        <div class="pt-3 flex items-center justify-end gap-2 border-t border-slate-100">
-          <button type="button" onclick="closeEditMemberModal()" class="px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-100 font-semibold">취소</button>
-          <button type="submit" class="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold">저장하기</button>
+        <div class="pt-3 flex items-center justify-between border-t border-slate-100">
+          <button type="button" id="btn-delete-member" onclick="handleDeleteMemberClick()" 
+            class="hidden px-3.5 py-2 rounded-xl bg-red-50 hover:bg-red-100 text-red-600 font-bold border border-red-200 text-xs transition">
+            🗑️ 팀원 계정 및 데이터 완전 삭제
+          </button>
+          <div class="flex items-center gap-2 ml-auto">
+            <button type="button" onclick="closeEditMemberModal()" class="px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-100 font-semibold">취소</button>
+            <button type="submit" class="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold">저장하기</button>
+          </div>
         </div>
       </form>
     </div>
