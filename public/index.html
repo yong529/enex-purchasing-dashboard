@@ -19,6 +19,31 @@
       background: #cbd5e1;
       border-radius: 4px;
     }
+
+    @media print {
+      body {
+        background: #ffffff !important;
+        padding: 0 !important;
+        margin: 0 !important;
+      }
+      body * {
+        visibility: hidden;
+      }
+      #weekly-report-print-area, #weekly-report-print-area * {
+        visibility: visible;
+      }
+      #weekly-report-print-area {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100% !important;
+        border: 2px solid #000000 !important;
+        box-shadow: none !important;
+      }
+      .no-print {
+        display: none !important;
+      }
+    }
   </style>
 </head>
 <body class="bg-[#f5f6f8] text-[#1e293b] antialiased p-3 sm:p-6 md:p-8 font-sans min-h-screen">
@@ -245,6 +270,125 @@
         </div>
         <div class="text-slate-400 text-[11px]">
           * 특정 날짜를 클릭하면 해당 일자에 마감 업무가 있는 담당자의 드롭다운이 자동으로 펼쳐집니다.
+        </div>
+      </div>
+    </section>
+
+    <!-- Section 4: 구매부 주간업무 보고 (Weekly Work Report & Free Notes Area - Matches image.png) -->
+    <section id="weekly-report-section" class="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-4 sm:p-6 space-y-5">
+      <!-- Section Header -->
+      <div class="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-4 border-b border-slate-200">
+        <div>
+          <div class="flex flex-wrap items-center gap-2">
+            <h3 class="text-base sm:text-lg font-black text-slate-900 flex items-center gap-2">
+              <span>📋</span> 구매부 주간업무 보고
+            </h3>
+            <span class="text-xs px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 font-bold border border-blue-200">
+              담당자별 자유 작성 양식
+            </span>
+            <span class="inline-flex items-center gap-1.5 text-[11px] px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-bold border border-emerald-200" title="각 담당자 행이 독립된 데이터로 분리 저장되어 동시 접속 시에도 덮어쓰기나 충돌이 발생하지 않습니다.">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+              동시작성 충돌방지 (행별 독립저장)
+            </span>
+          </div>
+          <p class="text-xs text-slate-500 mt-1">
+            금주 계획 및 실적, 차주 계획을 담당자별로 자유롭게 작성하고 하단 여백에 부서 공통 특이사항을 공유합니다.
+          </p>
+        </div>
+
+        <!-- Weekly Controls & Action Buttons -->
+        <div class="flex flex-wrap items-center gap-2">
+          <!-- Week Navigation -->
+          <div class="flex items-center bg-slate-50 border border-slate-200 rounded-xl p-1 text-xs">
+            <button onclick="changeReportWeek(-1)" class="px-2 py-1 rounded-lg hover:bg-white text-slate-600 transition" title="이전 주">◀</button>
+            <span id="weekly-report-current-week-label" class="px-2.5 font-bold text-slate-800">2026.11.09 ~ 2026.11.13</span>
+            <button onclick="changeReportWeek(1)" class="px-2 py-1 rounded-lg hover:bg-white text-slate-600 transition" title="다음 주">▶</button>
+            <button onclick="goToCurrentReportWeek()" class="ml-1 px-2 py-0.5 rounded bg-white hover:bg-slate-100 text-slate-700 font-semibold border border-slate-200 transition">이번 주</button>
+          </div>
+
+          <!-- Print & Export Buttons -->
+          <button onclick="printWeeklyReport()" class="inline-flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs px-3 py-2 rounded-xl transition shadow-2xs">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path></svg>
+            보고서 인쇄/PDF
+          </button>
+          <button onclick="copyWeeklyReportText()" class="inline-flex items-center gap-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 font-semibold text-xs px-3 py-2 rounded-xl border border-blue-200 transition shadow-2xs">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"></path></svg>
+            텍스트 복사
+          </button>
+        </div>
+      </div>
+
+      <!-- Formal Weekly Report Paper Container (Matches image.png) -->
+      <div id="weekly-report-print-area" class="border-2 border-slate-700 rounded-xl overflow-hidden bg-white shadow-xs">
+        <!-- Report Document Header (Exact match to image.png) -->
+        <div class="text-center py-4 border-b border-slate-700 bg-white">
+          <h2 class="text-xl sm:text-2xl font-black text-slate-900 tracking-wider">
+            구매부 주간업무 보고
+          </h2>
+        </div>
+
+        <!-- Date Range Bar on Top-Left (as in image.png: 2025.12.1~2025.12.4) -->
+        <div class="px-4 py-2 border-b-2 border-slate-700 bg-white flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-xs font-bold text-slate-900">
+          <div class="flex items-center gap-2">
+            <span id="weekly-report-date-display" class="font-mono text-sm tracking-tight font-extrabold text-slate-900">2026.11.09 ~ 2026.11.13</span>
+            <button onclick="promptCustomReportDateRange()" class="text-[11px] text-blue-600 hover:text-blue-800 font-semibold underline no-print" title="임의의 날짜 범위 텍스트로 변경">[기간 변경]</button>
+          </div>
+          <div class="text-[11px] text-slate-500 font-normal no-print flex items-center gap-2">
+            <span>🛡️ 동시 작성 가능 (본인 행 작성 후 [저장] 시 즉시 실시간 동기화)</span>
+          </div>
+        </div>
+
+        <!-- The Table: 구분 | 금주 계획 | 금주 실적 | 차주 계획 -->
+        <div class="overflow-x-auto">
+          <table class="w-full border-collapse text-xs text-slate-900">
+            <thead>
+              <tr class="bg-sky-100 text-slate-900 font-bold border-b border-slate-400 text-center select-none">
+                <th class="py-2.5 px-3 border-r border-slate-400 w-[14%] min-w-[120px] bg-sky-100 font-extrabold">구분</th>
+                <th class="py-2.5 px-4 border-r border-slate-400 w-[40%] min-w-[260px] text-left font-extrabold">금 주 계 획</th>
+                <th class="py-2.5 px-2 border-r border-slate-400 w-[10%] min-w-[85px] font-extrabold">금주 실적</th>
+                <th class="py-2.5 px-4 w-[36%] min-w-[260px] text-left font-extrabold">차 주 계 획</th>
+              </tr>
+            </thead>
+            <tbody id="weekly-report-tbody">
+              <!-- Dynamically populated rows for each team member -->
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Bottom Free Space (여백 영역): 특이사항 및 주간 공유 비고 (Exact match to user's request) -->
+        <div class="border-t-2 border-slate-700 p-4 sm:p-5 bg-slate-50/70 space-y-3.5">
+          <div class="flex items-center justify-between pb-2 border-b border-slate-200">
+            <div class="flex items-center gap-2">
+              <span class="text-sm font-black text-slate-900">📝 특이사항 및 주간 공유 비고 (여백 영역)</span>
+              <span class="text-[11px] text-slate-500 font-normal hidden sm:inline">단가 인상 협의, 원자재 수급, 시장 동향, 부서 공통 이슈 등 자유롭게 기재</span>
+            </div>
+            <button onclick="saveWeeklyFreeNotes()" id="btn-save-free-notes" 
+              class="no-print bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-3.5 py-1.5 rounded-lg transition shadow-xs flex items-center gap-1.5 active:scale-95">
+              <span>💾 공통 비고 저장</span>
+            </button>
+          </div>
+
+          <!-- Free Notes Textarea & Member Remarks -->
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+            <div class="md:col-span-2 space-y-1.5">
+              <label class="block text-[11px] font-bold text-slate-700">부서 공통 종합 특이사항 (자유 메모란)</label>
+              <textarea id="weekly-free-notes-input" rows="5" 
+                placeholder="[구매부 공통 특이사항]&#10;1. PB/원자재 공급사 단가 인상 협의 진행 경과...&#10;2. 주요 협력사 납기 동향 및 품질 이슈...&#10;3. 차주 부서 회의 일정 등 편하게 작성하세요."
+                class="w-full bg-white border border-slate-300 rounded-xl p-3 text-xs text-slate-800 leading-relaxed focus:ring-2 focus:ring-blue-500 focus:outline-none"></textarea>
+              <div class="flex items-center justify-between text-[11px] text-slate-400">
+                <span id="weekly-free-notes-meta">최종 저장: 없음</span>
+                <span class="text-[10px] text-slate-400 no-print">* 모든 팀원이 열람 및 보완할 수 있습니다.</span>
+              </div>
+            </div>
+
+            <!-- Member individual quick remarks / issues list -->
+            <div class="space-y-1.5">
+              <label class="block text-[11px] font-bold text-slate-700">담당자별 개인 비고 / 이슈</label>
+              <div id="weekly-member-remarks-list" class="space-y-2 max-h-48 overflow-y-auto p-1 bg-white border border-slate-200 rounded-xl">
+                <!-- Populated dynamically -->
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </section>

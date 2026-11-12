@@ -8,6 +8,16 @@ let selectedCalDate = null;
 let calMemberFilter = 'all';
 let isDirectivesFeedOpen = false;
 
+// Weekly Report State (구매부 주간업무 보고)
+let weeklyReports = [];
+let weeklyCommonNotes = {};
+let currentReportDate = new Date();
+let currentReportWeekId = '';
+let currentReportWeekRange = '';
+let customReportRangeText = null;
+let editingReportMemberId = null;
+
+
 // Legacy Mock Account / Demo Identifiers (to completely purge)
 const LEGACY_MOCK_MEMBER_IDS = ['member-1', 'member-2', 'member-3', 'member-4', 'member-5'];
 const LEGACY_NAMES = ['김차장', '이과장', '박대리', '최대리', '정주임'];
@@ -116,6 +126,8 @@ function initSupabase() {
         .on('postgres_changes', { event: '*', schema: 'public', table: 'members' }, () => fetchSupabaseData())
         .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, () => fetchSupabaseData())
         .on('postgres_changes', { event: '*', schema: 'public', table: 'directives' }, () => fetchSupabaseData())
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'weekly_reports' }, () => fetchWeeklyReportsFromSupabase())
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'weekly_common_notes' }, () => fetchWeeklyCommonNotesFromSupabase())
         .subscribe();
 
       // Listen to Supabase Auth State changes
@@ -222,6 +234,25 @@ async function fetchSupabaseData() {
       supabaseClient.from('members').upsert([ADMIN_USER]).then(() => {});
     }
 
+    // Fetch weekly reports and common notes
+    try {
+      const [wRes, nRes] = await Promise.all([
+        supabaseClient.from('weekly_reports').select('*'),
+        supabaseClient.from('weekly_common_notes').select('*')
+      ]);
+      if (wRes.data && Array.isArray(wRes.data) && wRes.data.length > 0) {
+        weeklyReports = wRes.data;
+      }
+      if (nRes.data && Array.isArray(nRes.data)) {
+        nRes.data.forEach(item => {
+          weeklyCommonNotes[item.week_id] = item;
+        });
+      }
+      saveWeeklyLocalState();
+    } catch (e) {
+      // Graceful fallback if tables are not yet created in Supabase
+    }
+
     renderAll();
     return true;
   } catch (err) {
@@ -325,11 +356,14 @@ function renderAll() {
   renderDirectivesFeed();
   renderMembersAccordion();
   renderCalendar();
+  renderWeeklyReport();
 }
 
 function loadLocalState() {
   // Purge legacy state with mock accounts
   localStorage.removeItem('enex_dashboard_v3_state');
+
+  loadWeeklyLocalState();
 
   try {
     const saved = localStorage.getItem('enex_dashboard_v4_clean');
@@ -363,6 +397,29 @@ function saveLocalState() {
       members, tasks, directives
     }));
   } catch (e) {}
+  saveWeeklyLocalState();
+}
+
+function loadWeeklyLocalState() {
+  try {
+    const savedReports = localStorage.getItem('enex_weekly_reports_v1');
+    if (savedReports) {
+      weeklyReports = JSON.parse(savedReports);
+    }
+  } catch (e) {}
+  try {
+    const savedNotes = localStorage.getItem('enex_weekly_notes_v1');
+    if (savedNotes) {
+      weeklyCommonNotes = JSON.parse(savedNotes);
+    }
+  } catch (e) {}
+}
+
+function saveWeeklyLocalState() {
+  try {
+    localStorage.setItem('enex_weekly_reports_v1', JSON.stringify(weeklyReports));
+    localStorage.setItem('enex_weekly_notes_v1', JSON.stringify(weeklyCommonNotes));
+  } catch (e) {}
 }
 
 // ==================== SECTION 0: MY ACTION ITEMS ====================
@@ -394,6 +451,7 @@ function changeCurrentUser(newId) {
   renderDirectivesFeed();
   renderMembersAccordion();
   renderCalendar();
+  renderWeeklyReport();
 }
 
 function renderMyActionSection() {
@@ -1911,7 +1969,546 @@ function closeSupabaseModal() {
   document.getElementById('supabase-modal').classList.add('hidden');
 }
 
+// ==================== SECTION 4: 구매부 주간업무 보고 (Weekly Report) ====================
+
+const DEFAULT_WEEKLY_SAMPLE = {
+  plan_this_week: `1. PB 단가인상 예정으로 인한 단가 협의
+   - 대상업체: 동화기업, 성창보드
+   - PB 15T(E0, 15형): 12,600원 → 13,000원, 3% 인상 예정
+
+2. 특판용 매립형 실리콘 조명 샘플 확인 및 적용 검토
+   - 업체: BIS
+
+3. 가구 그린워싱 및 친환경 표지인증 이해와 실무
+   - 주관: 경기도경제과학진흥원
+   - 교육기간: 11/27~28일 (12시간)`,
+  performance_this_week: `완료
+
+진행중
+
+완료`,
+  plan_next_week: `1. 우미오산세교2차 단가 협의
+   - 대상업체: 명진실업, 유니호퍼, 디앤뉴
+
+2. 금강 화성동탄 무선충전콘센트 품의
+   - 위퍼스 / 업체: 오성`,
+  notes: `PB 단가 인상 협의 차주 마무리 예정`
+};
+
+const DEFAULT_COMMON_NOTES = `[구매부 주간 현안 및 비고]
+• PB 공급사 단가 인상 관련: 주요 원자재 가격 동향 모니터링 및 추가 인상 억제 방안 검토 중
+• 조명 및 전기자재: 특판 현장 맞춤형 친환경 고효율 모델 우선 적용 추진
+• 11월 4주차 구매 실무 교육 이수 완료 (친환경 표지인증)`;
+
+function getWeekInfo(baseDate = new Date()) {
+  const d = new Date(baseDate);
+  const day = d.getDay(); // 0 is Sun, 1 is Mon...
+  const diffToMon = (day === 0 ? -6 : 1) - day;
+  const mon = new Date(d);
+  mon.setDate(d.getDate() + diffToMon);
+  const fri = new Date(mon);
+  fri.setDate(mon.getDate() + 4);
+
+  const y1 = mon.getFullYear();
+  const m1 = String(mon.getMonth() + 1).padStart(2, '0');
+  const d1 = String(mon.getDate()).padStart(2, '0');
+  const y2 = fri.getFullYear();
+  const m2 = String(fri.getMonth() + 1).padStart(2, '0');
+  const d2 = String(fri.getDate()).padStart(2, '0');
+
+  // ISO Week Number
+  const tempDate = new Date(mon.valueOf());
+  tempDate.setDate(tempDate.getDate() + 3);
+  const firstThursday = tempDate.valueOf();
+  tempDate.setMonth(0, 1);
+  if (tempDate.getDay() !== 4) {
+    tempDate.setMonth(0, 1 + ((4 - tempDate.getDay()) + 7) % 7);
+  }
+  const weekNum = 1 + Math.ceil((firstThursday - tempDate) / 604800000);
+
+  const weekId = `${y1}-W${String(weekNum).padStart(2, '0')}`;
+  const rangeStr = `${y1}.${m1}.${d1} ~ ${y2}.${m2}.${d2}`;
+  return { weekId, rangeStr, mondayDate: mon, fridayDate: fri };
+}
+
+function initWeeklyReportState() {
+  const info = getWeekInfo(currentReportDate);
+  currentReportWeekId = info.weekId;
+  currentReportWeekRange = info.rangeStr;
+}
+
+async function fetchWeeklyReportsFromSupabase() {
+  if (!supabaseClient) return;
+  try {
+    const { data, error } = await supabaseClient.from('weekly_reports').select('*');
+    if (!error && Array.isArray(data)) {
+      weeklyReports = data;
+      saveWeeklyLocalState();
+      // Protect user's typing session: do not re-render actively edited input
+      if (editingReportMemberId === null) {
+        renderWeeklyReport();
+      }
+    }
+  } catch (e) {}
+}
+
+async function fetchWeeklyCommonNotesFromSupabase() {
+  if (!supabaseClient) return;
+  try {
+    const { data, error } = await supabaseClient.from('weekly_common_notes').select('*');
+    if (!error && Array.isArray(data)) {
+      data.forEach(item => {
+        weeklyCommonNotes[item.week_id] = item;
+      });
+      saveWeeklyLocalState();
+      renderWeeklyReport();
+    }
+  } catch (e) {}
+}
+
+function escapeHtml(text) {
+  if (!text) return '';
+  return String(text)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function formatPerformanceBadges(text) {
+  if (!text) return '';
+  const lines = text.split('\n');
+  return lines.map(line => {
+    const trimmed = line.trim();
+    if (!trimmed) return '&nbsp;';
+    if (trimmed.includes('완료')) {
+      return `<span class="inline-block px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-300 font-extrabold text-[11px]">${escapeHtml(trimmed)}</span>`;
+    }
+    if (trimmed.includes('진행중') || trimmed.includes('진행')) {
+      return `<span class="inline-block px-2 py-0.5 rounded bg-blue-50 text-blue-800 border border-blue-300 font-extrabold text-[11px]">${escapeHtml(trimmed)}</span>`;
+    }
+    if (trimmed.includes('보류') || trimmed.includes('취소')) {
+      return `<span class="inline-block px-2 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-300 font-extrabold text-[11px]">${escapeHtml(trimmed)}</span>`;
+    }
+    return `<span class="font-bold text-slate-800">${escapeHtml(trimmed)}</span>`;
+  }).join('<br>');
+}
+
+function renderWeeklyReport() {
+  const dateDisplayEl = document.getElementById('weekly-report-date-display');
+  const weekLabelEl = document.getElementById('weekly-report-current-week-label');
+  const tbody = document.getElementById('weekly-report-tbody');
+  if (!tbody) return;
+
+  if (!currentReportWeekId) {
+    initWeeklyReportState();
+  }
+
+  const effectiveRange = customReportRangeText || currentReportWeekRange;
+  if (dateDisplayEl) dateDisplayEl.textContent = effectiveRange;
+  if (weekLabelEl) weekLabelEl.textContent = effectiveRange;
+
+  const teamMembers = getTeamMembers();
+  if (teamMembers.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="4" class="p-6 text-center text-slate-400 bg-slate-50 italic">
+          등록된 팀원이 없습니다. 상단 [+ 팀원 계정 등록]을 눌러 팀원을 등록해 주세요.
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  const isCurAdmin = checkIsAdmin();
+
+  // If no reports exist yet for this week, seed the default sample for the primary member
+  const hasReportsForWeek = weeklyReports.some(r => r.week_id === currentReportWeekId);
+  if (!hasReportsForWeek && teamMembers.length > 0) {
+    const primaryMember = teamMembers.find(m => m.username === 'yong' || m.username === 'yjlee02' || m.name.includes('이용주')) || teamMembers[0];
+    const sampleEntry = {
+      id: `report-${currentReportWeekId}-${primaryMember.id}`,
+      week_id: currentReportWeekId,
+      week_range: effectiveRange,
+      member_id: primaryMember.id,
+      member_name: primaryMember.name,
+      dept_label: '구매부',
+      plan_this_week: DEFAULT_WEEKLY_SAMPLE.plan_this_week,
+      performance_this_week: DEFAULT_WEEKLY_SAMPLE.performance_this_week,
+      plan_next_week: DEFAULT_WEEKLY_SAMPLE.plan_next_week,
+      notes: DEFAULT_WEEKLY_SAMPLE.notes,
+      updated_by: primaryMember.name,
+      updated_at: new Date().toISOString()
+    };
+    weeklyReports.push(sampleEntry);
+    saveWeeklyLocalState();
+    if (supabaseClient) {
+      supabaseClient.from('weekly_reports').upsert([sampleEntry]).then(() => {});
+    }
+  }
+
+  tbody.innerHTML = '';
+
+  teamMembers.forEach(m => {
+    let rep = weeklyReports.find(r => r.week_id === currentReportWeekId && (r.member_id === m.id || r.member_id === m.username));
+    const isMyRow = currentUserId === m.id || (m.username && currentUserId === m.username);
+    const canEdit = isCurAdmin || isMyRow;
+    const isEditing = editingReportMemberId === m.id;
+
+    const tr = document.createElement('tr');
+    tr.id = `weekly-row-${m.id}`;
+    tr.className = `border-b border-slate-300 transition ${isEditing ? 'bg-blue-50/30' : 'hover:bg-slate-50/50'}`;
+
+    if (isEditing) {
+      // Editable Mode
+      tr.innerHTML = `
+        <td class="p-3 border-r border-slate-400 bg-sky-50 text-center font-bold text-slate-900 align-top w-[14%]">
+          <div class="space-y-1">
+            <div class="text-xs text-blue-900 font-black">${m.name}</div>
+            <div class="text-[11px] text-slate-700 font-semibold">${m.title}</div>
+            <div class="text-[10px] text-slate-500 font-normal leading-tight">${m.role || '구매부'}</div>
+            <div class="pt-2">
+              <span class="inline-block text-[10px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 font-bold">편집 중</span>
+            </div>
+            <button type="button" onclick="toggleEditReportRow('${m.id}')" 
+              class="no-print mt-2 text-[10px] bg-slate-200 hover:bg-slate-300 text-slate-700 font-semibold px-2 py-0.5 rounded transition">
+              ✕ 닫기
+            </button>
+          </div>
+        </td>
+        <td class="p-3 border-r border-slate-400 align-top w-[40%]">
+          <label class="block text-[10px] font-bold text-slate-500 mb-1">금주 계획 (번호 매김 및 세부내용)</label>
+          <textarea id="edit-plan-${m.id}" rows="8" 
+            class="w-full p-2.5 border border-blue-400 rounded-lg text-xs font-sans leading-relaxed text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+            placeholder="1. 업무 제목&#10;   - 대상업체: &#10;   - 주요 내용:">${rep ? (rep.plan_this_week || '') : ''}</textarea>
+        </td>
+        <td class="p-2 border-r border-slate-400 align-top text-center w-[10%]">
+          <div class="flex items-center justify-center gap-1 mb-1">
+            <button type="button" onclick="insertPerfStatus('${m.id}', '완료')" class="text-[9px] bg-emerald-100 hover:bg-emerald-200 text-emerald-800 font-bold px-1.5 py-0.5 rounded border border-emerald-300">+완료</button>
+            <button type="button" onclick="insertPerfStatus('${m.id}', '진행중')" class="text-[9px] bg-amber-100 hover:bg-amber-200 text-amber-800 font-bold px-1.5 py-0.5 rounded border border-amber-300">+진행</button>
+          </div>
+          <textarea id="edit-perf-${m.id}" rows="7" 
+            class="w-full p-2 border border-blue-400 rounded-lg text-xs font-sans text-center font-bold leading-relaxed text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+            placeholder="완료&#10;&#10;진행중">${rep ? (rep.performance_this_week || '') : ''}</textarea>
+        </td>
+        <td class="p-3 align-top w-[36%] space-y-2">
+          <div>
+            <label class="block text-[10px] font-bold text-slate-500 mb-1">차주 계획 (추진 예정 사항)</label>
+            <textarea id="edit-next-${m.id}" rows="6" 
+              class="w-full p-2.5 border border-blue-400 rounded-lg text-xs font-sans leading-relaxed text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              placeholder="1. 차주 추진 업무...">${rep ? (rep.plan_next_week || '') : ''}</textarea>
+          </div>
+          <div class="flex items-center justify-between pt-2 border-t border-blue-200">
+            <span class="text-[10px] text-slate-400">🛡️ 독립 저장 (타 팀원과 충돌 없음)</span>
+            <div class="flex items-center gap-1.5">
+              <button type="button" onclick="toggleEditReportRow('${m.id}')" class="px-2.5 py-1 text-xs text-slate-600 hover:bg-slate-200 rounded">취소</button>
+              <button type="button" onclick="saveMemberWeeklyReport('${m.id}')" 
+                class="px-3.5 py-1 text-xs bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg shadow-xs transition active:scale-95">
+                💾 내 주간업무 저장
+              </button>
+            </div>
+          </div>
+        </td>
+      `;
+    } else {
+      // View Mode (Matches image.png)
+      const planText = rep && rep.plan_this_week ? escapeHtml(rep.plan_this_week) : '<span class="text-slate-300 italic no-print">(등록된 계획이 없습니다)</span>';
+      const perfText = rep && rep.performance_this_week ? formatPerformanceBadges(rep.performance_this_week) : '<span class="text-slate-300 italic no-print">-</span>';
+      const nextText = rep && rep.plan_next_week ? escapeHtml(rep.plan_next_week) : '<span class="text-slate-300 italic no-print">(등록된 계획이 없습니다)</span>';
+
+      tr.innerHTML = `
+        <td class="p-3 border-r border-b border-slate-400 bg-sky-50 text-center font-bold text-slate-900 align-middle w-[14%]">
+          <div class="space-y-1">
+            <div class="text-xs text-blue-900 font-black">${m.name}</div>
+            <div class="text-[11px] text-slate-700 font-semibold">${m.title}</div>
+            <div class="text-[10px] text-slate-500 font-normal leading-tight">${m.role || '구매부'}</div>
+            ${canEdit ? `
+              <button onclick="toggleEditReportRow('${m.id}')" 
+                class="no-print mt-2 text-[10px] bg-white hover:bg-blue-50 border border-blue-300 text-blue-700 font-bold px-2 py-0.5 rounded shadow-2xs block mx-auto transition">
+                ✏️ 작성/수정
+              </button>
+            ` : `
+              <span class="no-print block text-[9px] text-slate-400 mt-1 font-normal">🔒 담당자 전용</span>
+            `}
+          </div>
+        </td>
+        <td class="p-3 sm:p-4 border-r border-b border-slate-400 align-top text-xs leading-relaxed whitespace-pre-wrap font-sans text-slate-900 w-[40%]">
+          ${planText}
+        </td>
+        <td class="p-2.5 border-r border-b border-slate-400 align-middle text-center text-xs font-bold leading-loose whitespace-pre-wrap w-[10%]">
+          ${perfText}
+        </td>
+        <td class="p-3 sm:p-4 border-b border-slate-400 align-top text-xs leading-relaxed whitespace-pre-wrap font-sans text-slate-900 w-[36%]">
+          ${nextText}
+        </td>
+      `;
+    }
+
+    tbody.appendChild(tr);
+  });
+
+  // Render bottom free notes (부서 공통 종합 특이사항)
+  const commonNotesObj = weeklyCommonNotes[currentReportWeekId];
+  const freeNotesInput = document.getElementById('weekly-free-notes-input');
+  const freeNotesMeta = document.getElementById('weekly-free-notes-meta');
+  if (freeNotesInput && document.activeElement !== freeNotesInput) {
+    freeNotesInput.value = commonNotesObj ? (commonNotesObj.notes || '') : DEFAULT_COMMON_NOTES;
+  }
+  if (freeNotesMeta) {
+    if (commonNotesObj && commonNotesObj.updated_at) {
+      freeNotesMeta.textContent = `최종 저장: ${commonNotesObj.updated_by || '담당자'} (${new Date(commonNotesObj.updated_at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })})`;
+    } else {
+      freeNotesMeta.textContent = `기본 공유 비고 표시 중`;
+    }
+  }
+
+  // Render member remarks list
+  const remarksContainer = document.getElementById('weekly-member-remarks-list');
+  if (remarksContainer) {
+    remarksContainer.innerHTML = '';
+    teamMembers.forEach(m => {
+      const rep = weeklyReports.find(r => r.week_id === currentReportWeekId && (r.member_id === m.id || r.member_id === m.username));
+      const note = rep ? (rep.notes || '') : '';
+      const isMyRow = currentUserId === m.id || (m.username && currentUserId === m.username);
+      const canEdit = isCurAdmin || isMyRow;
+
+      const item = document.createElement('div');
+      item.className = 'text-xs p-2 rounded-lg bg-slate-50 border border-slate-200/80 space-y-1';
+      item.innerHTML = `
+        <div class="flex items-center justify-between">
+          <span class="font-bold text-slate-800 text-[11px]">${m.name} (${m.title})</span>
+          ${canEdit ? `
+            <button onclick="promptEditMemberNote('${m.id}')" class="no-print text-[10px] text-blue-600 hover:underline">수정</button>
+          ` : ''}
+        </div>
+        <p class="text-slate-600 text-[11px] leading-snug">${note || '<span class="text-slate-400 italic">특이사항 없음</span>'}</p>
+      `;
+      remarksContainer.appendChild(item);
+    });
+  }
+}
+
+function toggleEditReportRow(memberId) {
+  if (!currentUserId) {
+    alert('로그인 후 주간업무를 작성하실 수 있습니다.');
+    openLoginModal(true);
+    return;
+  }
+  const isCurAdmin = checkIsAdmin();
+  const isMyRow = currentUserId === memberId || (members.some(m => m.id === memberId && m.username === currentUserId));
+  if (!isCurAdmin && !isMyRow) {
+    alert('본인 담당의 주간업무만 수정할 수 있습니다.');
+    return;
+  }
+
+  if (editingReportMemberId === memberId) {
+    editingReportMemberId = null;
+  } else {
+    editingReportMemberId = memberId;
+  }
+  renderWeeklyReport();
+}
+
+function insertPerfStatus(memberId, status) {
+  const textarea = document.getElementById(`edit-perf-${memberId}`);
+  if (!textarea) return;
+  const cur = textarea.value.trim();
+  textarea.value = cur ? `${cur}\n\n${status}` : status;
+  textarea.focus();
+}
+
+async function saveMemberWeeklyReport(memberId) {
+  const member = members.find(m => m.id === memberId);
+  if (!member) return;
+
+  const plan_this_week = (document.getElementById(`edit-plan-${memberId}`)?.value || '').trim();
+  const performance_this_week = (document.getElementById(`edit-perf-${memberId}`)?.value || '').trim();
+  const plan_next_week = (document.getElementById(`edit-next-${memberId}`)?.value || '').trim();
+
+  const curMember = members.find(m => m.id === currentUserId) || { name: '담당자' };
+  const repId = `report-${currentReportWeekId}-${memberId}`;
+
+  const payload = {
+    id: repId,
+    week_id: currentReportWeekId,
+    week_range: customReportRangeText || currentReportWeekRange,
+    member_id: memberId,
+    member_name: member.name,
+    dept_label: '구매부',
+    plan_this_week,
+    performance_this_week,
+    plan_next_week,
+    notes: '',
+    updated_by: curMember.name,
+    updated_at: new Date().toISOString()
+  };
+
+  // 1. Instant optimistic local update
+  const idx = weeklyReports.findIndex(r => r.week_id === currentReportWeekId && r.member_id === memberId);
+  if (idx !== -1) {
+    payload.notes = weeklyReports[idx].notes || '';
+    weeklyReports[idx] = payload;
+  } else {
+    weeklyReports.push(payload);
+  }
+
+  saveWeeklyLocalState();
+  editingReportMemberId = null;
+  renderWeeklyReport();
+
+  // 2. Sync to Supabase in background
+  if (supabaseClient) {
+    try {
+      await supabaseClient.from('weekly_reports').upsert([payload]);
+    } catch (err) {
+      console.warn('Supabase weekly report sync failed, kept in local state:', err);
+    }
+  }
+
+  alert(`✅ [${member.name}] 님의 주간업무가 성공적으로 저장되었습니다!\n각 담당자별로 독립 저장되어 다른 팀원의 내용과 충돌 없이 안전하게 보관됩니다.`);
+}
+
+async function saveWeeklyFreeNotes() {
+  if (!currentUserId) {
+    alert('로그인 후 공통 비고를 저장할 수 있습니다.');
+    openLoginModal(true);
+    return;
+  }
+
+  const inputEl = document.getElementById('weekly-free-notes-input');
+  if (!inputEl) return;
+  const notesText = inputEl.value.trim();
+  const curMember = members.find(m => m.id === currentUserId) || { name: '담당자' };
+
+  const payload = {
+    week_id: currentReportWeekId,
+    notes: notesText,
+    updated_by: curMember.name,
+    updated_at: new Date().toISOString()
+  };
+
+  weeklyCommonNotes[currentReportWeekId] = payload;
+  saveWeeklyLocalState();
+
+  const metaEl = document.getElementById('weekly-free-notes-meta');
+  if (metaEl) {
+    metaEl.textContent = `최종 저장: ${curMember.name} (방금 전)`;
+  }
+
+  if (supabaseClient) {
+    try {
+      await supabaseClient.from('weekly_common_notes').upsert([payload]);
+    } catch (err) {
+      console.warn('Supabase weekly notes sync failed, kept in local state:', err);
+    }
+  }
+
+  alert('💾 구매부 주간 공통 특이사항 및 비고가 저장되었습니다.');
+}
+
+function promptEditMemberNote(memberId) {
+  const member = members.find(m => m.id === memberId);
+  if (!member) return;
+  const isCurAdmin = checkIsAdmin();
+  const isMyRow = currentUserId === memberId || (member.username && currentUserId === member.username);
+  if (!isCurAdmin && !isMyRow) {
+    alert('본인의 개인 비고만 수정할 수 있습니다.');
+    return;
+  }
+
+  let rep = weeklyReports.find(r => r.week_id === currentReportWeekId && r.member_id === memberId);
+  const curNote = rep ? (rep.notes || '') : '';
+  const newNote = prompt(`[${member.name} ${member.title}] 님의 주간 특이사항/비고를 입력하세요:`, curNote);
+  if (newNote === null) return;
+
+  const curMember = members.find(m => m.id === currentUserId) || { name: '담당자' };
+  if (rep) {
+    rep.notes = newNote.trim();
+    rep.updated_by = curMember.name;
+    rep.updated_at = new Date().toISOString();
+  } else {
+    rep = {
+      id: `report-${currentReportWeekId}-${memberId}`,
+      week_id: currentReportWeekId,
+      week_range: customReportRangeText || currentReportWeekRange,
+      member_id: memberId,
+      member_name: member.name,
+      dept_label: '구매부',
+      plan_this_week: '',
+      performance_this_week: '',
+      plan_next_week: '',
+      notes: newNote.trim(),
+      updated_by: curMember.name,
+      updated_at: new Date().toISOString()
+    };
+    weeklyReports.push(rep);
+  }
+
+  saveWeeklyLocalState();
+  renderWeeklyReport();
+
+  if (supabaseClient) {
+    supabaseClient.from('weekly_reports').upsert([rep]).then(() => {});
+  }
+}
+
+function promptCustomReportDateRange() {
+  const cur = customReportRangeText || currentReportWeekRange;
+  const res = prompt('주간업무 보고서 상단에 표기할 기간을 입력하세요 (예: 2025.12.1~2025.12.4):', cur);
+  if (res !== null && res.trim()) {
+    customReportRangeText = res.trim();
+    renderWeeklyReport();
+  }
+}
+
+function changeReportWeek(delta) {
+  currentReportDate.setDate(currentReportDate.getDate() + (delta * 7));
+  customReportRangeText = null;
+  initWeeklyReportState();
+  renderWeeklyReport();
+}
+
+function goToCurrentReportWeek() {
+  currentReportDate = new Date();
+  customReportRangeText = null;
+  initWeeklyReportState();
+  renderWeeklyReport();
+}
+
+function printWeeklyReport() {
+  window.print();
+}
+
+function copyWeeklyReportText() {
+  const teamMembers = getTeamMembers();
+  const range = customReportRangeText || currentReportWeekRange;
+  let text = `[구매부 주간업무 보고]\n기간: ${range}\n=========================================\n\n`;
+
+  teamMembers.forEach(m => {
+    const rep = weeklyReports.find(r => r.week_id === currentReportWeekId && (r.member_id === m.id || r.member_id === m.username));
+    text += `■ ${m.name} (${m.title}) - ${m.role}\n`;
+    text += `[금주 계획]\n${(rep && rep.plan_this_week) ? rep.plan_this_week : '(계획 없음)'}\n\n`;
+    text += `[금주 실적]\n${(rep && rep.performance_this_week) ? rep.performance_this_week : '(실적 없음)'}\n\n`;
+    text += `[차주 계획]\n${(rep && rep.plan_next_week) ? rep.plan_next_week : '(계획 없음)'}\n\n`;
+    if (rep && rep.notes) {
+      text += `[개인 비고] ${rep.notes}\n\n`;
+    }
+    text += `-----------------------------------------\n`;
+  });
+
+  const commonNotes = weeklyCommonNotes[currentReportWeekId]?.notes || DEFAULT_COMMON_NOTES;
+  text += `■ 특이사항 및 주간 공유 비고\n${commonNotes}\n=========================================`;
+
+  navigator.clipboard.writeText(text).then(() => {
+    alert('📋 주간업무 보고서 전문이 클립보드에 복사되었습니다!\n사내 메신저나 이메일에 바로 [붙여넣기(Ctrl+V)] 하실 수 있습니다.');
+  }).catch(() => {
+    alert('클립보드 복사에 실패했습니다. 수동으로 텍스트를 복사해 주세요.');
+  });
+}
+
 // Initial Run
 document.addEventListener('DOMContentLoaded', () => {
   fetchInitialData();
 });
+

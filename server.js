@@ -232,6 +232,65 @@ const server = http.createServer(async (req, res) => {
     return sendJSON(res, 200, { success: true, id });
   }
 
+  // ==================== WEEKLY REPORTS API ====================
+  if (req.method === 'GET' && pathname === '/api/weekly-reports') {
+    const db = readDB();
+    return sendJSON(res, 200, db.weekly_reports || []);
+  }
+
+  if (req.method === 'POST' && pathname === '/api/weekly-reports') {
+    const body = await parseBody(req);
+    const db = readDB();
+    if (!db.weekly_reports) db.weekly_reports = [];
+    const idx = db.weekly_reports.findIndex(r => r.id === body.id || (r.week_id === body.week_id && r.member_id === body.member_id));
+    if (idx !== -1) {
+      db.weekly_reports[idx] = { ...db.weekly_reports[idx], ...body, updated_at: new Date().toISOString() };
+      writeDB(db);
+      return sendJSON(res, 200, db.weekly_reports[idx]);
+    } else {
+      const newReport = {
+        id: body.id || `report-${Date.now()}`,
+        week_id: body.week_id,
+        week_range: body.week_range,
+        member_id: body.member_id,
+        member_name: body.member_name,
+        dept_label: body.dept_label || '구매부',
+        plan_this_week: body.plan_this_week || '',
+        performance_this_week: body.performance_this_week || '',
+        plan_next_week: body.plan_next_week || '',
+        notes: body.notes || '',
+        updated_by: body.updated_by || '담당자',
+        updated_at: new Date().toISOString()
+      };
+      db.weekly_reports.push(newReport);
+      writeDB(db);
+      return sendJSON(res, 201, newReport);
+    }
+  }
+
+  // ==================== WEEKLY COMMON NOTES API ====================
+  if (req.method === 'GET' && pathname === '/api/weekly-common-notes') {
+    const db = readDB();
+    return sendJSON(res, 200, db.weekly_common_notes || {});
+  }
+
+  if (req.method === 'POST' && pathname === '/api/weekly-common-notes') {
+    const body = await parseBody(req);
+    const db = readDB();
+    if (!db.weekly_common_notes) db.weekly_common_notes = {};
+    if (body.week_id) {
+      db.weekly_common_notes[body.week_id] = {
+        week_id: body.week_id,
+        notes: body.notes || '',
+        updated_by: body.updated_by || '담당자',
+        updated_at: new Date().toISOString()
+      };
+      writeDB(db);
+      return sendJSON(res, 200, db.weekly_common_notes[body.week_id]);
+    }
+    return sendJSON(res, 400, { error: 'week_id is required' });
+  }
+
   // ==================== STATIC FILES ====================
   let filePath = path.join(PUBLIC_DIR, pathname === '/' ? 'index.html' : pathname);
   if (!filePath.startsWith(PUBLIC_DIR)) {

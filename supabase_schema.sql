@@ -66,3 +66,40 @@ CREATE POLICY "Allow public read/write directives" ON public.directives FOR ALL 
 INSERT INTO public.members (id, username, email, password, name, title, role, icon, color, order_num, is_admin) VALUES
 ('admin-yong', 'yong', 'yong@enex.co.kr', '1234', '시스템 총괄 관리자', '총괄관리자', '구매본부 시스템 총괄 및 클라우드 DB/인증 관리', '👑', 'indigo', 1, true)
 ON CONFLICT (id) DO UPDATE SET username = EXCLUDED.username, password = EXCLUDED.password, is_admin = true;
+
+-- 7. 구매부 주간업무 보고 테이블 (weekly_reports)
+-- 각 담당자별(member_id) 및 주차별(week_id)로 독립된 행으로 저장되어 동시 작업 충돌이 발생하지 않습니다.
+CREATE TABLE IF NOT EXISTS public.weekly_reports (
+    id TEXT PRIMARY KEY, -- e.g. "report-{week_id}-{member_id}"
+    week_id TEXT NOT NULL, -- e.g. "2026-W46"
+    week_range TEXT NOT NULL, -- e.g. "2026.11.09 ~ 2026.11.13"
+    member_id TEXT REFERENCES public.members(id) ON DELETE CASCADE,
+    member_name TEXT,
+    dept_label TEXT DEFAULT '구매부',
+    plan_this_week TEXT DEFAULT '',
+    performance_this_week TEXT DEFAULT '',
+    plan_next_week TEXT DEFAULT '',
+    notes TEXT DEFAULT '',
+    updated_by TEXT,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- 8. 주간 공통 특이사항 및 비고 (weekly_common_notes)
+CREATE TABLE IF NOT EXISTS public.weekly_common_notes (
+    week_id TEXT PRIMARY KEY,
+    notes TEXT DEFAULT '',
+    updated_by TEXT,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- 9. 주간업무 테이블 실시간 동기화(Supabase Realtime) 추가
+ALTER PUBLICATION supabase_realtime ADD TABLE public.weekly_reports;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.weekly_common_notes;
+
+-- 10. RLS 보안 정책 설정
+ALTER TABLE public.weekly_reports ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.weekly_common_notes ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow public read/write weekly_reports" ON public.weekly_reports FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow public read/write weekly_common_notes" ON public.weekly_common_notes FOR ALL USING (true) WITH CHECK (true);
+
