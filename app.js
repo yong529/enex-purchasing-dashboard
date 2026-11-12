@@ -94,13 +94,59 @@ const DEFAULT_MEMBERS = [ADMIN_USER];
 const DEFAULT_TASKS = [];
 const DEFAULT_DIRECTIVES = [];
 
+// Helper to retrieve currently logged-in member object with multi-field fallback (id, username, email, name)
+function getCurrentUserMember() {
+  if (!currentUserId) return null;
+  const cur = members.find(m => m.id === currentUserId) ||
+              members.find(m => m.username && m.username.toLowerCase() === String(currentUserId).toLowerCase()) ||
+              members.find(m => m.email && m.email.toLowerCase() === String(currentUserId).toLowerCase()) ||
+              members.find(m => m.name && m.name.toLowerCase() === String(currentUserId).toLowerCase()) ||
+              null;
+  if (cur && cur.id && currentUserId !== cur.id && !['yong', 'admin-yong'].includes(currentUserId)) {
+    currentUserId = cur.id;
+    try { sessionStorage.setItem('enex_current_user_id', cur.id); } catch (e) {}
+  }
+  return cur;
+}
+
 // Helper to determine if current logged-in user has system admin permissions
 function checkIsAdmin() {
   if (!currentUserId) return false;
-  if (currentUserId === 'admin-yong' || (typeof ADMIN_USER !== 'undefined' && currentUserId === ADMIN_USER.id)) return true;
-  const cur = members.find(m => m.id === currentUserId);
+  if (currentUserId === 'admin-yong' || currentUserId === 'yong' || (typeof ADMIN_USER !== 'undefined' && currentUserId === ADMIN_USER.id)) return true;
+  const cur = getCurrentUserMember();
   if (!cur) return false;
   return cur.username === 'yong' || cur.id === 'admin-yong' || cur.is_admin === true;
+}
+
+// Helper to determine if a member or memberId belongs to the currently logged in user
+function isCurrentUserMember(memberOrId) {
+  if (!memberOrId) return false;
+  if (checkIsAdmin()) return true;
+  if (!currentUserId) return false;
+
+  let target = typeof memberOrId === 'string' 
+    ? (members.find(m => m.id === memberOrId || m.username === memberOrId || m.name === memberOrId) || { id: memberOrId }) 
+    : memberOrId;
+
+  // 1. Direct ID match
+  if (target.id && String(currentUserId) === String(target.id)) return true;
+
+  // 2. Direct username / email / name match against currentUserId
+  const curStr = String(currentUserId).trim().toLowerCase();
+  if (target.username && target.username.toLowerCase() === curStr) return true;
+  if (target.email && target.email.toLowerCase() === curStr) return true;
+  if (target.name && target.name.toLowerCase() === curStr) return true;
+
+  // 3. Compare with logged-in member object (cur)
+  const cur = getCurrentUserMember();
+  if (cur) {
+    if (cur.id && target.id && String(cur.id) === String(target.id)) return true;
+    if (cur.name && target.name && cur.name.trim() === target.name.trim()) return true;
+    if (cur.username && target.username && cur.username.toLowerCase() === target.username.toLowerCase()) return true;
+    if (cur.email && target.email && cur.email.toLowerCase() === target.email.toLowerCase()) return true;
+  }
+
+  return false;
 }
 
 // Helper to deduplicate members by id, username, email, or (name + title)
@@ -696,7 +742,7 @@ function changeCurrentUser(newId) {
 }
 
 function renderMyActionSection() {
-  const curMember = members.find(m => m.id === currentUserId);
+  const curMember = getCurrentUserMember();
   const todayStr = formatDate(today);
 
   // Update Top Global Header User Badge & Supabase Admin Button
@@ -1143,7 +1189,7 @@ function renderMembersAccordion() {
 
     const pendingCount = memberTasks.filter(t => !t.is_completed).length;
     const isExpanded = expandedMemberIds.has(m.id);
-    const isCurrentUser = m.id === currentUserId;
+    const isCurrentUser = isCurrentUserMember(m);
     const canManageMember = isCurAdmin || isCurrentUser;
 
     memberTasks.sort((a, b) => {
@@ -1221,7 +1267,7 @@ function renderMembersAccordion() {
           badge = `<span class="text-[10px] px-2 py-0.5 rounded bg-blue-50 text-blue-700 font-medium">마감: ${t.deadline}</span>`;
         }
 
-        const isTaskOwner = t.member_id === currentUserId;
+        const isTaskOwner = isCurrentUserMember(t.member_id);
         const canDeleteTask = isCurAdmin || isTaskOwner;
         const canToggleTask = isCurAdmin || isTaskOwner;
 
@@ -1419,7 +1465,7 @@ async function toggleTask(taskId) {
   if (!task) return;
 
   const isCurAdmin = checkIsAdmin();
-  const isOwner = task.member_id === currentUserId;
+  const isOwner = isCurrentUserMember(task.member_id);
   if (!isCurAdmin && !isOwner) {
     alert('본인에게 배정된 할 일만 완료 상태를 변경할 수 있습니다.');
     return;
@@ -1445,7 +1491,7 @@ async function toggleTask(taskId) {
 async function deleteTask(taskId) {
   const task = tasks.find(t => t.id === taskId);
   const isCurAdmin = checkIsAdmin();
-  const isOwner = task && task.member_id === currentUserId;
+  const isOwner = task && isCurrentUserMember(task.member_id);
   if (!isCurAdmin && !isOwner) {
     alert('본인의 할 일만 삭제할 수 있습니다.');
     return;
@@ -2496,9 +2542,14 @@ function renderWeeklyReport() {
   teamMembers.forEach(m => {
     let rep = weeklyReports.find(r => 
       r.week_id === currentReportWeekId && 
-      (r.member_id === m.id || (m.username && r.member_id === m.username) || r.id === `report-${currentReportWeekId}-${m.id}`)
+      (
+        r.member_id === m.id || 
+        (m.username && r.member_id === m.username) || 
+        (m.name && r.member_name === m.name) || 
+        r.id === `report-${currentReportWeekId}-${m.id}`
+      )
     );
-    const isMyRow = currentUserId === m.id || (m.username && currentUserId === m.username);
+    const isMyRow = isCurrentUserMember(m);
     const canEdit = isCurAdmin || isMyRow;
     const isEditing = editingReportMemberId === m.id;
 
@@ -2620,9 +2671,12 @@ function renderWeeklyReport() {
   if (remarksContainer) {
     remarksContainer.innerHTML = '';
     teamMembers.forEach(m => {
-      const rep = weeklyReports.find(r => r.week_id === currentReportWeekId && (r.member_id === m.id || r.member_id === m.username));
+      const rep = weeklyReports.find(r => 
+        r.week_id === currentReportWeekId && 
+        (r.member_id === m.id || (m.username && r.member_id === m.username) || (m.name && r.member_name === m.name))
+      );
       const note = rep ? (rep.notes || '') : '';
-      const isMyRow = currentUserId === m.id || (m.username && currentUserId === m.username);
+      const isMyRow = isCurrentUserMember(m);
       const canEdit = isCurAdmin || isMyRow;
 
       const item = document.createElement('div');
@@ -2648,7 +2702,8 @@ function toggleEditReportRow(memberId) {
     return;
   }
   const isCurAdmin = checkIsAdmin();
-  const isMyRow = currentUserId === memberId || (members.some(m => m.id === memberId && m.username === currentUserId));
+  const targetMember = members.find(m => m.id === memberId) || { id: memberId };
+  const isMyRow = isCurrentUserMember(targetMember);
   if (!isCurAdmin && !isMyRow) {
     alert('본인 담당의 주간업무만 수정할 수 있습니다.');
     return;
@@ -2678,7 +2733,7 @@ async function saveMemberWeeklyReport(memberId) {
   const performance_this_week = (document.getElementById(`edit-perf-${memberId}`)?.value || '').trim();
   const plan_next_week = (document.getElementById(`edit-next-${memberId}`)?.value || '').trim();
 
-  const curMember = members.find(m => m.id === currentUserId) || { name: '담당자' };
+  const curMember = getCurrentUserMember() || { name: '담당자' };
   const repId = `report-${currentReportWeekId}-${memberId}`;
 
   const payload = {
@@ -2700,7 +2755,12 @@ async function saveMemberWeeklyReport(memberId) {
   localStorage.setItem('enex_weekly_seeded_v2', 'true');
   const idx = weeklyReports.findIndex(r => 
     r.week_id === currentReportWeekId && 
-    (r.member_id === memberId || (member.username && r.member_id === member.username) || r.id === repId)
+    (
+      r.member_id === memberId || 
+      (member.username && r.member_id === member.username) || 
+      (member.name && r.member_name === member.name) ||
+      r.id === repId
+    )
   );
   if (idx !== -1) {
     payload.notes = weeklyReports[idx].notes || '';
@@ -2753,7 +2813,7 @@ async function saveWeeklyFreeNotes() {
   const inputEl = document.getElementById('weekly-free-notes-input');
   if (!inputEl) return;
   const notesText = inputEl.value.trim();
-  const curMember = members.find(m => m.id === currentUserId) || { name: '담당자' };
+  const curMember = getCurrentUserMember() || { name: '담당자' };
 
   const payload = {
     week_id: currentReportWeekId,
@@ -2802,21 +2862,21 @@ async function saveWeeklyFreeNotes() {
 }
 
 function promptEditMemberNote(memberId) {
-  const member = members.find(m => m.id === memberId);
+  const member = members.find(m => m.id === memberId) || { id: memberId };
   if (!member) return;
   const isCurAdmin = checkIsAdmin();
-  const isMyRow = currentUserId === memberId || (member.username && currentUserId === member.username);
+  const isMyRow = isCurrentUserMember(member);
   if (!isCurAdmin && !isMyRow) {
     alert('본인의 개인 비고만 수정할 수 있습니다.');
     return;
   }
 
-  let rep = weeklyReports.find(r => r.week_id === currentReportWeekId && r.member_id === memberId);
+  let rep = weeklyReports.find(r => r.week_id === currentReportWeekId && (r.member_id === memberId || (member.name && r.member_name === member.name)));
   const curNote = rep ? (rep.notes || '') : '';
-  const newNote = prompt(`[${member.name} ${member.title}] 님의 주간 특이사항/비고를 입력하세요:`, curNote);
+  const newNote = prompt(`[${member.name || '담당자'} ${member.title || ''}] 님의 주간 특이사항/비고를 입력하세요:`, curNote);
   if (newNote === null) return;
 
-  const curMember = members.find(m => m.id === currentUserId) || { name: '담당자' };
+  const curMember = getCurrentUserMember() || { name: '담당자' };
   if (rep) {
     rep.notes = newNote.trim();
     rep.updated_by = curMember.name;
