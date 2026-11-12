@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ENEX 구매부 관제 대시보드</title>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <!-- Supabase JS Client for Cloud Realtime Sync -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    .custom-scroll::-webkit-scrollbar {
+      width: 6px;
+    }
+    .custom-scroll::-webkit-scrollbar-track {
+      background: #f1f5f9;
+      border-radius: 4px;
+    }
+    .custom-scroll::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 4px;
+    }
+
+    @media print {
+      body {
+        background: #ffffff !important;
+        padding: 0 !important;
+        margin: 0 !important;
+      }
+      body * {
+        visibility: hidden;
+      }
+      #weekly-report-print-area, #weekly-report-print-area * {
+        visibility: visible;
+      }
+      #weekly-report-print-area {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100% !important;
+        border: 2px solid #000000 !important;
+        box-shadow: none !important;
+      }
+      .no-print {
+        display: none !important;
+      }
+    }
+  </style>
+</head>
+<body class="bg-[#f5f6f8] text-[#1e293b] antialiased p-3 sm:p-6 md:p-8 font-sans min-h-screen">
+
+  <div class="max-w-6xl mx-auto space-y-6">
+
+    <!-- Top Global Header & Account Control -->
+    <header class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-sm">
+      <div class="flex items-center gap-3">
+        <div class="w-11 h-11 rounded-xl bg-gradient-to-tr from-blue-700 to-blue-500 flex items-center justify-center text-white font-black text-xl shadow-sm">
+          E
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="text-lg sm:text-xl font-black text-slate-900 tracking-tight">ENEX 구매부 관제 대시보드</h1>
+            <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+              <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              클라우드 실시간 가동중
+            </span>
+          </div>
+          <p class="text-xs text-slate-500 mt-0.5">상단 개인화 업무 관제 · 지시사항 하달 및 수신 · 조직도 드롭다운 & 캘린더</p>
+        </div>
+      </div>
+
+      <!-- Actions & Account Info -->
+      <div class="flex flex-wrap items-center gap-2">
+        <!-- Current Logged In Account Badge -->
+        <button onclick="openLoginModal()" class="flex items-center gap-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-xl text-xs transition">
+          <span id="header-user-avatar" class="text-base">👤</span>
+          <span id="header-user-name" class="font-bold text-slate-800">로그인 필요</span>
+          <span class="text-[10px] text-blue-600 font-semibold bg-blue-50 border border-blue-200 px-1.5 py-0.2 rounded">계정 전환</span>
+        </button>
+
+        <button onclick="openRegisterModal()" class="inline-flex items-center gap-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs px-3 py-2 rounded-xl transition">
+          + 팀원 계정 등록
+        </button>
+
+        <button onclick="openDirectiveModal()" class="inline-flex items-center gap-1.5 bg-red-600 hover:bg-red-700 text-white font-bold text-xs px-3.5 py-2 rounded-xl shadow-sm transition active:scale-95">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z"></path></svg>
+          지시사항 하달
+        </button>
+
+        <button id="header-supabase-btn" onclick="openSupabaseModal()" class="hidden inline-flex items-center gap-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 font-semibold text-xs px-3 py-2 rounded-xl transition">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+          ⚙️ Supabase 연동 (관리자)
+        </button>
+      </div>
+    </header>
+
+    <!-- Section 0: [제일 상단] 내가 해야 할 일 & 확인할 지시사항 (My Action Items & Alerts) -->
+    <section id="my-action-section" class="bg-gradient-to-br from-slate-900 to-slate-800 text-white rounded-3xl p-5 sm:p-6 shadow-md space-y-4">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-700/60">
+        <div class="flex items-center gap-3">
+          <div id="my-profile-avatar" class="w-12 h-12 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center text-2xl shadow-inner">
+            👔
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="text-xs px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 font-semibold border border-blue-400/30">로그인 인증됨</span>
+              <h2 class="text-base sm:text-lg font-black text-white tracking-tight" id="my-profile-greeting">
+                환영합니다, 김차장님!
+              </h2>
+            </div>
+            <p class="text-xs text-slate-300 mt-0.5" id="my-profile-summary">
+              오늘 김차장님이 즉시 확인해야 할 긴급 지시사항 및 마감 할 일입니다.
+            </p>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <span class="text-xs px-3 py-1.5 rounded-xl bg-white/10 text-slate-200 font-medium" id="my-alert-badges">
+            확인할 것 <strong class="text-amber-400" id="my-pending-count">0</strong>건
+          </span>
+          <button onclick="handleLogout()" class="text-xs px-2.5 py-1.5 rounded-xl bg-white/15 hover:bg-white/25 text-white transition font-medium">
+            로그아웃
+          </button>
+        </div>
+      </div>
+
+      <!-- My Dynamic Alerts Grid (2 Columns: 하달된 지시사항 + 내 오늘/임박 마감 할 일) -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        
+        <!-- Left: 나에게 하달된 지시사항 -->
+        <div class="bg-white/5 border border-white/10 rounded-2xl p-4 space-y-3">
+          <div class="flex items-center justify-between">
+            <h3 class="text-xs font-bold uppercase tracking-wider text-amber-300 flex items-center gap-1.5">
+              <span>🚨</span> 나에게 하달된 지시사항
+            </h3>
+            <span class="text-[11px] text-slate-400" id="my-directives-count">0건 대기</span>
+          </div>
+
+          <div class="space-y-2 max-h-56 overflow-y-auto custom-scroll pr-1" id="my-directives-list">
+            <!-- Rendered by app.js -->
+          </div>
+        </div>
+
+        <!-- Right: 내가 오늘/곧 마감해야 할 일 -->
+        <div class="bg-white/5 border border-white/10 rounded-2xl p-4 space-y-3">
+          <div class="flex items-center justify-between">
+            <h3 class="text-xs font-bold uppercase tracking-wider text-blue-300 flex items-center gap-1.5">
+              <span>⏰</span> 내 마감 임박 할 일
+            </h3>
+            <span class="text-[11px] text-slate-400" id="my-tasks-count">0건 진행중</span>
+          </div>
+
+          <div class="space-y-2 max-h-56 overflow-y-auto custom-scroll pr-1" id="my-tasks-list">
+            <!-- Rendered by app.js -->
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- Section 1: 전체 지시사항 하달 이력 피드 -->
+    <section class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+      <div onclick="toggleDirectivesFeed()" class="p-4 sm:p-4.5 flex items-center justify-between cursor-pointer hover:bg-slate-50/70 select-none transition">
+        <div class="flex items-center gap-2.5">
+          <span class="text-base">📢</span>
+          <div>
+            <h2 class="text-sm font-bold text-slate-900">구매부 지시사항 하달 이력</h2>
+            <p class="text-xs text-slate-400">발신된 지시사항 및 수신 담당자별 확인/처리 현황</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="text-xs font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-600" id="total-directives-badge">0건</span>
+          <div id="directives-feed-arrow" class="w-6 h-6 rounded flex items-center justify-center text-slate-400 transition transform">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+          </div>
+        </div>
+      </div>
+
+      <div id="directives-feed-content" class="hidden border-t border-slate-100 p-4 space-y-2.5 bg-slate-50/40">
+        <!-- Rendered by app.js -->
+      </div>
+    </section>
+
+    <!-- Section 2: 구매부 조직도 (인원별 클릭 시 드롭다운 형태) -->
+    <section class="space-y-3">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <h2 class="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+            <span>👥</span> 구매부 조직원 및 담당 업무
+          </h2>
+          <span class="text-xs text-slate-400 font-normal hidden sm:inline">계정 생성 시 조직도에 자동 추가되며, 클릭 시 할 일 목록이 펼쳐집니다</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <button onclick="toggleAllAccordions()" id="btn-toggle-all" class="text-xs font-semibold px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 transition">
+            전체 펼치기 / 접기
+          </button>
+          <button onclick="openRegisterModal()" class="text-xs font-semibold px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 transition">
+            + 팀원 계정 등록 (조직도 추가)
+          </button>
+        </div>
+      </div>
+
+      <!-- Accordion / Dropdown Members Container -->
+      <div class="space-y-3" id="members-accordion-container">
+        <!-- Rendered by app.js -->
+      </div>
+    </section>
+
+    <!-- Section 3: 하단 마감일 캘린더 -->
+    <section class="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-4 sm:p-6 space-y-4">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+        <div>
+          <div class="flex items-center gap-2">
+            <h3 class="text-base font-black text-slate-900 flex items-center gap-2">
+              <span>📅</span> <span id="cal-month-title">2026년 11월</span> 구매부 마감일 캘린더
+            </h3>
+            <button onclick="goToToday()" class="text-xs px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold transition">오늘로 이동</button>
+          </div>
+          <p class="text-xs text-slate-400 mt-1">모든 팀원의 할 일 마감일이 달력에 실시간 표시됩니다. 특정 날짜를 클릭하여 일정을 필터링할 수 있습니다.</p>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <!-- Calendar Filter by Member -->
+          <select id="cal-member-filter" onchange="handleCalMemberFilter(this.value)" class="text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-700 font-medium focus:ring-2 focus:ring-blue-500">
+            <option value="all">전체 팀원 마감일</option>
+            <!-- Populated dynamically -->
+          </select>
+
+          <!-- Month Nav -->
+          <div class="flex items-center gap-1 text-slate-500">
+            <button onclick="changeMonth(-1)" class="p-2 rounded-xl hover:bg-slate-100 border border-slate-200 transition" title="이전 달">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
+            </button>
+            <button onclick="changeMonth(1)" class="p-2 rounded-xl hover:bg-slate-100 border border-slate-200 transition" title="다음 달">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Selected Date Filter Banner -->
+      <div id="cal-filter-banner" class="hidden items-center justify-between px-4 py-2.5 rounded-xl bg-blue-50 border border-blue-200 text-xs text-blue-900 font-medium">
+        <span class="flex items-center gap-2">
+          <span>🎯</span> <strong id="cal-filter-date-text">2026-11-13</strong> 마감 업무 필터링 활성화
+        </span>
+        <button onclick="clearDateFilter()" class="text-blue-600 hover:text-blue-900 font-bold ml-2">필터 해제 ✕</button>
+      </div>
+
+      <!-- Days of Week Header -->
+      <div class="grid grid-cols-7 text-center text-xs font-bold text-slate-400 py-1 border-b border-slate-100">
+        <div class="text-red-500">일요일</div>
+        <div>월요일</div>
+        <div>화요일</div>
+        <div>수요일</div>
+        <div>목요일</div>
+        <div>금요일</div>
+        <div class="text-blue-500">토요일</div>
+      </div>
+
+      <!-- Calendar Days Grid -->
+      <div class="grid grid-cols-7 gap-1.5 text-xs" id="calendar-days">
+        <!-- Rendered by app.js -->
+      </div>
+
+      <!-- Calendar Legend -->
+      <div class="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500">
+        <div class="flex items-center gap-3">
+          <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-red-500"></span> 오늘 마감 / 긴급</span>
+          <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-blue-500"></span> 마감 예정</span>
+          <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> 완료됨</span>
+        </div>
+        <div class="text-slate-400 text-[11px]">
+          * 특정 날짜를 클릭하면 해당 일자에 마감 업무가 있는 담당자의 드롭다운이 자동으로 펼쳐집니다.
+        </div>
+      </div>
+    </section>
+
+    <!-- Section 4: 구매부 주간업무 보고 (Weekly Work Report & Free Notes Area - Matches image.png) -->
+    <section id="weekly-report-section" class="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-4 sm:p-6 space-y-5">
+      <!-- Section Header -->
+      <div class="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-4 border-b border-slate-200">
+        <div>
+          <div class="flex flex-wrap items-center gap-2">
+            <h3 class="text-base sm:text-lg font-black text-slate-900 flex items-center gap-2">
+              <span>📋</span> 구매부 주간업무 보고
+            </h3>
+            <span class="text-xs px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 font-bold border border-blue-200">
+              담당자별 자유 작성 양식
+            </span>
+            <span class="inline-flex items-center gap-1.5 text-[11px] px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-bold border border-emerald-200" title="각 담당자 행이 독립된 데이터로 분리 저장되어 동시 접속 시에도 덮어쓰기나 충돌이 발생하지 않습니다.">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+              동시작성 충돌방지 (행별 독립저장)
+            </span>
+          </div>
+          <p class="text-xs text-slate-500 mt-1">
+            금주 계획 및 실적, 차주 계획을 담당자별로 자유롭게 작성하고 하단 여백에 부서 공통 특이사항을 공유합니다.
+          </p>
+        </div>
+
+        <!-- Weekly Controls & Action Buttons -->
+        <div class="flex flex-wrap items-center gap-2">
+          <!-- Week Navigation -->
+          <div class="flex items-center bg-slate-50 border border-slate-200 rounded-xl p-1 text-xs">
+            <button onclick="changeReportWeek(-1)" class="px-2 py-1 rounded-lg hover:bg-white text-slate-600 transition" title="이전 주">◀</button>
+            <span id="weekly-report-current-week-label" class="px-2.5 font-bold text-slate-800">2026.11.09 ~ 2026.11.13</span>
+            <button onclick="changeReportWeek(1)" class="px-2 py-1 rounded-lg hover:bg-white text-slate-600 transition" title="다음 주">▶</button>
+            <button onclick="goToCurrentReportWeek()" class="ml-1 px-2 py-0.5 rounded bg-white hover:bg-slate-100 text-slate-700 font-semibold border border-slate-200 transition">이번 주</button>
+          </div>
+
+          <!-- Print & Export Buttons -->
+          <button onclick="printWeeklyReport()" class="inline-flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs px-3 py-2 rounded-xl transition shadow-2xs">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path></svg>
+            보고서 인쇄/PDF
+          </button>
+          <button onclick="copyWeeklyReportText()" class="inline-flex items-center gap-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 font-semibold text-xs px-3 py-2 rounded-xl border border-blue-200 transition shadow-2xs">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"></path></svg>
+            텍스트 복사
+          </button>
+        </div>
+      </div>
+
+      <!-- Formal Weekly Report Paper Container (Matches image.png) -->
+      <div id="weekly-report-print-area" class="border-2 border-slate-700 rounded-xl overflow-hidden bg-white shadow-xs">
+        <!-- Report Document Header (Exact match to image.png) -->
+        <div class="text-center py-4 border-b border-slate-700 bg-white">
+          <h2 class="text-xl sm:text-2xl font-black text-slate-900 tracking-wider">
+            구매부 주간업무 보고
+          </h2>
+        </div>
+
+        <!-- Date Range Bar on Top-Left (as in image.png: 2025.12.1~2025.12.4) -->
+        <div class="px-4 py-2 border-b-2 border-slate-700 bg-white flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-xs font-bold text-slate-900">
+          <div class="flex items-center gap-2">
+            <span id="weekly-report-date-display" class="font-mono text-sm tracking-tight font-extrabold text-slate-900">2026.11.09 ~ 2026.11.13</span>
+            <button onclick="promptCustomReportDateRange()" class="text-[11px] text-blue-600 hover:text-blue-800 font-semibold underline no-print" title="임의의 날짜 범위 텍스트로 변경">[기간 변경]</button>
+          </div>
+          <div class="text-[11px] text-slate-500 font-normal no-print flex items-center gap-2">
+            <span>🛡️ 동시 작성 가능 (본인 행 작성 후 [저장] 시 즉시 실시간 동기화)</span>
+          </div>
+        </div>
+
+        <!-- The Table: 구분 | 금주 계획 | 금주 실적 | 차주 계획 -->
+        <div class="overflow-x-auto">
+          <table class="w-full border-collapse text-xs text-slate-900">
+            <thead>
+              <tr class="bg-sky-100 text-slate-900 font-bold border-b border-slate-400 text-center select-none">
+                <th class="py-2.5 px-3 border-r border-slate-400 w-[14%] min-w-[120px] bg-sky-100 font-extrabold">구분</th>
+                <th class="py-2.5 px-4 border-r border-slate-400 w-[40%] min-w-[260px] text-left font-extrabold">금 주 계 획</th>
+                <th class="py-2.5 px-2 border-r border-slate-400 w-[10%] min-w-[85px] font-extrabold">금주 실적</th>
+                <th class="py-2.5 px-4 w-[36%] min-w-[260px] text-left font-extrabold">차 주 계 획</th>
+              </tr>
+            </thead>
+            <tbody id="weekly-report-tbody">
+              <!-- Dynamically populated rows for each team member -->
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Bottom Free Space (여백 영역): 특이사항 및 주간 공유 비고 (Exact match to user's request) -->
+        <div class="border-t-2 border-slate-700 p-4 sm:p-5 bg-slate-50/70 space-y-3.5">
+          <div class="flex items-center justify-between pb-2 border-b border-slate-200">
+            <div class="flex items-center gap-2">
+              <span class="text-sm font-black text-slate-900">📝 특이사항 및 주간 공유 비고 (여백 영역)</span>
+              <span class="text-[11px] text-slate-500 font-normal hidden sm:inline">단가 인상 협의, 원자재 수급, 시장 동향, 부서 공통 이슈 등 자유롭게 기재</span>
+            </div>
+            <button onclick="saveWeeklyFreeNotes()" id="btn-save-free-notes" 
+              class="no-print bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-3.5 py-1.5 rounded-lg transition shadow-xs flex items-center gap-1.5 active:scale-95">
+              <span>💾 공통 비고 저장</span>
+            </button>
+          </div>
+
+          <!-- Free Notes Textarea & Member Remarks -->
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+            <div class="md:col-span-2 space-y-1.5">
+              <label class="block text-[11px] font-bold text-slate-700">부서 공통 종합 특이사항 (자유 메모란)</label>
+              <textarea id="weekly-free-notes-input" rows="5" 
+                placeholder="[구매부 공통 특이사항]&#10;1. PB/원자재 공급사 단가 인상 협의 진행 경과...&#10;2. 주요 협력사 납기 동향 및 품질 이슈...&#10;3. 차주 부서 회의 일정 등 편하게 작성하세요."
+                class="w-full bg-white border border-slate-300 rounded-xl p-3 text-xs text-slate-800 leading-relaxed focus:ring-2 focus:ring-blue-500 focus:outline-none"></textarea>
+              <div class="flex items-center justify-between text-[11px] text-slate-400">
+                <span id="weekly-free-notes-meta">최종 저장: 없음</span>
+                <span class="text-[10px] text-slate-400 no-print">* 모든 팀원이 열람 및 보완할 수 있습니다.</span>
+              </div>
+            </div>
+
+            <!-- Member individual quick remarks / issues list -->
+            <div class="space-y-1.5">
+              <label class="block text-[11px] font-bold text-slate-700">담당자별 개인 비고 / 이슈</label>
+              <div id="weekly-member-remarks-list" class="space-y-2 max-h-48 overflow-y-auto p-1 bg-white border border-slate-200 rounded-xl">
+                <!-- Populated dynamically -->
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="bg-white border border-slate-200/80 rounded-2xl p-4 text-xs text-slate-500 flex flex-col md:flex-row md:items-center justify-between gap-2">
+      <div class="flex items-center gap-2">
+        <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+        <span>ENEX 구매본부 통합 업무 관제 시스템 • <strong class="text-slate-700">Netlify & Supabase Cloud 연동</strong></span>
+      </div>
+      <div class="text-[11px] text-slate-400">
+        24시간 실시간 무중단 서비스
+      </div>
+    </footer>
+
+  </div>
+
+  <!-- Modal 0: 로그인 / 계정 선택 모달 (Login Modal) -->
+  <!-- Modal 0: 로그인 / 계정 선택 모달 (Login Modal) -->
+  <div id="login-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100 space-y-4">
+      <div class="flex items-center justify-between pb-2 border-b border-slate-100">
+        <div class="flex items-center gap-2.5">
+          <div class="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center text-white font-black text-lg shadow-xs">
+            E
+          </div>
+          <div>
+            <h3 class="text-base font-bold text-slate-900">ENEX 구매부 관제 시스템 로그인</h3>
+            <p class="text-[11px] text-slate-500">본인 계정으로 로그인 후 대시보드를 이용하세요.</p>
+          </div>
+        </div>
+        <button id="login-close-x" onclick="closeLoginModal()" class="hidden text-slate-400 hover:text-slate-600">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+        </button>
+      </div>
+
+      <!-- Supabase Connection Status Banner -->
+      <div id="login-supabase-alert"></div>
+
+      <!-- Quick 1-Click Select List (for registered team members) -->
+      <div class="space-y-1.5" id="login-accounts-section">
+        <div class="flex items-center justify-between">
+          <label class="block font-bold text-slate-700 text-xs">등록된 구매부 팀원 빠른 접속</label>
+          <span class="text-[10px] text-slate-400">클릭 즉시 접속</span>
+        </div>
+        <div class="grid grid-cols-1 gap-1.5 max-h-40 overflow-y-auto pr-1 custom-scroll" id="login-accounts-list">
+          <!-- Populated dynamically -->
+        </div>
+      </div>
+
+      <!-- Direct ID & Password Login Form -->
+      <div class="pt-3 border-t border-slate-100 space-y-2">
+        <div class="flex items-center justify-between">
+          <label class="block font-bold text-slate-700 text-xs">🔑 아이디 / 이메일 실시간 로그인</label>
+          <span class="text-[10px] text-emerald-600 font-semibold bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">Supabase Auth</span>
+        </div>
+        <form id="direct-login-form" onsubmit="handleDirectLogin(event)" class="space-y-2 text-xs">
+          <div class="space-y-1.5">
+            <div>
+              <label class="block text-[11px] font-medium text-slate-600 mb-0.5">아이디 또는 이메일</label>
+              <input type="text" id="login-username-input" placeholder="사내 아이디 또는 이메일 입력" required
+                class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none">
+            </div>
+            <div>
+              <label class="block text-[11px] font-medium text-slate-600 mb-0.5">비밀번호</label>
+              <input type="password" id="login-password-input" placeholder="비밀번호" required
+                class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none">
+            </div>
+          </div>
+          <button type="submit" id="btn-login-submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-xl transition text-xs shadow-xs flex items-center justify-center gap-1.5">
+            <span>로그인하기</span>
+          </button>
+        </form>
+      </div>
+
+      <div class="pt-2 border-t border-slate-100 flex items-center justify-between">
+        <button onclick="closeLoginModal(); openRegisterModal();" class="text-xs font-bold text-blue-600 hover:text-blue-800">
+          + 새 팀원 계정 등록 (회원가입 & 조직도 추가)
+        </button>
+        <button id="login-close-btn" onclick="closeLoginModal()" class="hidden px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-100 font-semibold text-xs transition">
+          닫기
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 1: 새 팀원 계정 등록 (회원가입 & 조직도 자동 추가) 모달 -->
+  <div id="register-modal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100 space-y-4 max-h-[90vh] overflow-y-auto custom-scroll">
+      <div class="flex items-center justify-between pb-2 border-b border-slate-100">
+        <div>
+          <div class="flex items-center gap-2">
+            <h3 class="text-base font-bold text-slate-900">새 팀원 계정 등록</h3>
+            <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">Supabase Auth</span>
+          </div>
+          <p class="text-xs text-slate-500 mt-0.5">계정 생성 시 구매부 조직도에 자동으로 인원이 추가됩니다.</p>
+        </div>
+        <button onclick="closeRegisterModal()" class="text-slate-400 hover:text-slate-600">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+        </button>
+      </div>
+
+      <!-- Register Supabase Status Banner -->
+      <div id="reg-supabase-alert"></div>
+
+      <form id="register-form" onsubmit="handleRegisterUser(event)" class="space-y-3 text-xs">
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">성명</label>
+            <input type="text" id="reg-name" required placeholder="예: 강대리, 홍길동" 
+              class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none">
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">직급</label>
+            <input type="text" id="reg-title" required placeholder="예: 대리, 주임, 차장" 
+              class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none">
+          </div>
+        </div>
+
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1">담당 업무 및 역할 (상세)</label>
+          <textarea id="reg-role" rows="2" required placeholder="예: 키친 상판 인조대리석 수급 및 공급 단가계약 총괄" 
+            class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none"></textarea>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">로그인 아이디 또는 이메일</label>
+            <input type="text" id="reg-username" required placeholder="예: kang 또는 kang@enex.co.kr" 
+              class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none">
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">비밀번호 (6자 이상)</label>
+            <input type="password" id="reg-password" required minlength="6" value="123456" placeholder="6자리 이상"
+              class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">아바타 아이콘</label>
+            <div class="flex items-center gap-2">
+              <input type="text" id="reg-icon" required value="🧑‍💼" maxlength="4" class="w-12 text-center text-lg bg-slate-50 border border-slate-200 rounded-xl px-2 py-1.5">
+              <div class="flex gap-1 text-base overflow-x-auto py-1">
+                <span onclick="setRegIcon('👔')" class="cursor-pointer hover:scale-125 transition">👔</span>
+                <span onclick="setRegIcon('🔩')" class="cursor-pointer hover:scale-125 transition">🔩</span>
+                <span onclick="setRegIcon('🍳')" class="cursor-pointer hover:scale-125 transition">🍳</span>
+                <span onclick="setRegIcon('📦')" class="cursor-pointer hover:scale-125 transition">📦</span>
+                <span onclick="setRegIcon('📑')" class="cursor-pointer hover:scale-125 transition">📑</span>
+                <span onclick="setRegIcon('🧑‍💼')" class="cursor-pointer hover:scale-125 transition">🧑‍💼</span>
+              </div>
+            </div>
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">테마 색상</label>
+            <select id="reg-color" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+              <option value="indigo">인디고 (네이비)</option>
+              <option value="amber">앰버 (오렌지)</option>
+              <option value="blue" selected>블루 (파랑)</option>
+              <option value="purple">퍼플 (보라)</option>
+              <option value="emerald">에메랄드 (초록)</option>
+              <option value="rose">로즈 (빨강)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="pt-3 flex items-center justify-end gap-2 border-t border-slate-100">
+          <button type="button" onclick="closeRegisterModal()" class="px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-100 font-semibold transition">취소</button>
+          <button type="submit" class="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold shadow-sm transition">계정 생성 및 로그인</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal 2: 지시사항 하달 모달 (Directive Modal) -->
+  <div id="directive-modal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-100 space-y-4">
+      <div class="flex items-center justify-between pb-2 border-b border-slate-100">
+        <h3 class="text-base font-bold text-slate-900 flex items-center gap-2">
+          <span>📢</span> 새 지시사항 하달하기
+        </h3>
+        <button onclick="closeDirectiveModal()" class="text-slate-400 hover:text-slate-600">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+        </button>
+      </div>
+
+      <form id="directive-form" onsubmit="handleCreateDirective(event)" class="space-y-3.5 text-xs">
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">발신자 (지시자)</label>
+            <input type="text" id="directive-issuer-display" readonly 
+              class="w-full bg-slate-100 border border-slate-200 rounded-xl px-3 py-2 text-slate-700 font-bold focus:outline-none">
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">수신 대상 (담당자)</label>
+            <select id="directive-target-select" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none">
+              <option value="all">전체 공지 (구매부 전원)</option>
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1">지시 제목</label>
+          <input type="text" id="directive-title" required placeholder="예: 헤펠레 댐핑 힌지 독일 선적 지연 대체 수배 결과 즉시 보고" 
+            class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none">
+        </div>
+
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1">세부 지시 내용 및 조치 요청사항</label>
+          <textarea id="directive-content" rows="3" required placeholder="구체적인 지시 사항, 마감 시한, 보고 양식 등을 상세히 입력하세요..." 
+            class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none"></textarea>
+        </div>
+
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1">긴급도</label>
+          <select id="directive-priority" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+            <option value="urgent" selected>🚨 긴급 지시 (즉시 조치 / 보고 필요)</option>
+            <option value="normal">📋 업무 지시 (정규 일정 내 처리)</option>
+            <option value="request">❓ 확인 및 승인 요청</option>
+          </select>
+        </div>
+
+        <div class="pt-3 flex items-center justify-end gap-2 border-t border-slate-100">
+          <button type="button" onclick="closeDirectiveModal()" class="px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-100 font-semibold transition">취소</button>
+          <button type="submit" class="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white font-semibold shadow-sm transition">지시 하달</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal 3: Edit Member Modal -->
+  <div id="edit-member-modal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100 space-y-4">
+      <div class="flex items-center justify-between pb-2 border-b border-slate-100">
+        <h3 class="text-base font-bold text-slate-900 flex items-center gap-2">
+          <span>✏️</span> <span id="modal-edit-member-heading">담당자 정보 및 업무역할 수정</span>
+        </h3>
+        <button onclick="closeEditMemberModal()" class="text-slate-400 hover:text-slate-600">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+        </button>
+      </div>
+
+      <form id="edit-member-form" onsubmit="handleSaveMember(event)" class="space-y-3.5 text-xs">
+        <input type="hidden" id="edit-member-id">
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">직급</label>
+            <input type="text" id="edit-member-title" required class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 font-medium">
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">성명</label>
+            <input type="text" id="edit-member-name" required class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 font-medium">
+          </div>
+        </div>
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1">담당 업무 및 역할</label>
+          <textarea id="edit-member-role" rows="2" required class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800"></textarea>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">아이콘 (이모지)</label>
+            <input type="text" id="edit-member-icon" required maxlength="4" class="w-14 text-center text-lg bg-slate-50 border border-slate-200 rounded-xl px-2 py-1.5">
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">테마 색상</label>
+            <select id="edit-member-color" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800">
+              <option value="indigo">인디고 (네이비)</option>
+              <option value="amber">앰버 (오렌지)</option>
+              <option value="blue">블루 (파랑)</option>
+              <option value="purple">퍼플 (보라)</option>
+              <option value="emerald">에메랄드 (초록)</option>
+              <option value="rose">로즈 (빨강)</option>
+            </select>
+          </div>
+        </div>
+        <div class="pt-3 flex items-center justify-between border-t border-slate-100">
+          <button type="button" id="btn-delete-member" onclick="handleDeleteMemberClick()" 
+            class="hidden px-3.5 py-2 rounded-xl bg-red-50 hover:bg-red-100 text-red-600 font-bold border border-red-200 text-xs transition">
+            🗑️ 팀원 계정 및 데이터 완전 삭제
+          </button>
+          <div class="flex items-center gap-2 ml-auto">
+            <button type="button" onclick="closeEditMemberModal()" class="px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-100 font-semibold">취소</button>
+            <button type="submit" class="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold">저장하기</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal 4: Supabase Deployment Guide Modal -->
+  <div id="supabase-modal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-100 space-y-4">
+      <div class="flex items-center justify-between pb-2 border-b border-slate-100">
+        <h3 class="text-base font-bold text-slate-900 flex items-center gap-2">
+          <span>⚡</span> Supabase 실시간 클라우드 DB 연동
+        </h3>
+        <button onclick="closeSupabaseModal()" class="text-slate-400 hover:text-slate-600">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+        </button>
+      </div>
+
+      <div class="text-xs text-slate-600 space-y-3 leading-relaxed">
+        <p>
+          Supabase 프로젝트 정보를 입력하시면 브라우저를 새로고침해도 전 직원의 데이터가 실시간으로 동기화됩니다.
+        </p>
+
+        <div class="bg-amber-50 p-2.5 rounded-xl border border-amber-200 text-[11px] text-amber-900 leading-normal space-y-1">
+          <div class="font-bold flex items-center gap-1 text-amber-950">
+            <span>🔑</span> Supabase Anon Key 확인 방법
+          </div>
+          <p class="text-[10px] text-amber-800">
+            1. Supabase 대시보드 (<a href="https://supabase.com/dashboard/project/lnilzitmifivbhauepac" target="_blank" class="underline text-blue-700 font-bold">콘솔 바로가기</a>) 접속<br>
+            2. 좌측 하단 <strong>Project Settings (⚙️ 설정) &gt; API</strong> 클릭<br>
+            3. <strong>Project API Keys</strong> 에서 <code>anon</code> <code>public</code> 키를 복사하여 아래에 붙여넣기
+          </p>
+        </div>
+
+        <div class="bg-blue-50/60 p-3 rounded-xl border border-blue-200 space-y-2">
+          <div>
+            <label class="block font-bold text-slate-800 text-[11px] mb-1">Supabase Project URL</label>
+            <input type="text" id="supabase-url-input" value="https://lnilzitmifivbhauepac.supabase.co" placeholder="https://lnilzitmifivbhauepac.supabase.co" 
+              class="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-800 font-mono text-xs focus:ring-2 focus:ring-blue-500">
+          </div>
+          <div>
+            <label class="block font-bold text-slate-800 text-[11px] mb-1">Supabase Publishable Key (Anon Key)</label>
+            <input type="password" id="supabase-key-input" placeholder="sb_publishable_... 또는 eyJhbGci..." 
+              class="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-800 font-mono text-xs focus:ring-2 focus:ring-blue-500">
+          </div>
+          <div class="pt-1 flex items-center justify-between">
+            <span id="supabase-conn-status" class="text-[11px] text-slate-500 font-medium">연동 상태 확인중...</span>
+            <button type="button" onclick="saveSupabaseConfig()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold px-3 py-1.5 rounded-lg text-xs shadow-xs transition">
+              연동 저장 및 시작
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="pt-3 flex items-center justify-end border-t border-slate-100">
+        <button onclick="closeSupabaseModal()" class="px-4 py-2 rounded-xl bg-slate-900 text-white font-semibold text-xs">닫기</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="./app.js"></script>
+</body>
+</html>
