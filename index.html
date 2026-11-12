@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ENEX 구매부 관제 대시보드</title>
+  <title>ENEX 구매부 주간업무 관리</title>
   <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
   <!-- Supabase JS Client for Cloud Realtime Sync -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -58,13 +58,13 @@
         </div>
         <div>
           <div class="flex items-center gap-2">
-            <h1 class="text-lg sm:text-xl font-black text-slate-900 tracking-tight">ENEX 구매부 관제 대시보드</h1>
+            <h1 class="text-lg sm:text-xl font-black text-slate-900 tracking-tight">ENEX 구매부 주간업무 관리</h1>
             <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
               <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
               클라우드 실시간 가동중
             </span>
           </div>
-          <p class="text-xs text-slate-500 mt-0.5">상단 개인화 업무 관제 · 지시사항 하달 및 수신 · 조직도 드롭다운 & 캘린더</p>
+          <p class="text-xs text-slate-500 mt-0.5">실시간 주간업무 보고 · 팀원 일정 및 마감일 · 부서 업무 공유</p>
         </div>
       </div>
 
@@ -157,124 +157,7 @@
       </div>
     </section>
 
-    <!-- Section 1: 전체 지시사항 하달 이력 피드 -->
-    <section class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
-      <div onclick="toggleDirectivesFeed()" class="p-4 sm:p-4.5 flex items-center justify-between cursor-pointer hover:bg-slate-50/70 select-none transition">
-        <div class="flex items-center gap-2.5">
-          <span class="text-base">📢</span>
-          <div>
-            <h2 class="text-sm font-bold text-slate-900">구매부 지시사항 하달 이력</h2>
-            <p class="text-xs text-slate-400">발신된 지시사항 및 수신 담당자별 확인/처리 현황</p>
-          </div>
-        </div>
-        <div class="flex items-center gap-2">
-          <span class="text-xs font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-600" id="total-directives-badge">0건</span>
-          <div id="directives-feed-arrow" class="w-6 h-6 rounded flex items-center justify-center text-slate-400 transition transform">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
-          </div>
-        </div>
-      </div>
-
-      <div id="directives-feed-content" class="hidden border-t border-slate-100 p-4 space-y-2.5 bg-slate-50/40">
-        <!-- Rendered by app.js -->
-      </div>
-    </section>
-
-    <!-- Section 2: 구매부 조직도 (인원별 클릭 시 드롭다운 형태) -->
-    <section class="space-y-3">
-      <div class="flex items-center justify-between">
-        <div class="flex items-center gap-2">
-          <h2 class="text-sm font-bold text-slate-800 flex items-center gap-1.5">
-            <span>👥</span> 구매부 조직원 및 담당 업무
-          </h2>
-          <span class="text-xs text-slate-400 font-normal hidden sm:inline">계정 생성 시 조직도에 자동 추가되며, 클릭 시 할 일 목록이 펼쳐집니다</span>
-        </div>
-        <div class="flex items-center gap-2">
-          <button onclick="toggleAllAccordions()" id="btn-toggle-all" class="text-xs font-semibold px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 transition">
-            전체 펼치기 / 접기
-          </button>
-          <button onclick="openRegisterModal()" class="text-xs font-semibold px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 transition">
-            + 팀원 계정 등록 (조직도 추가)
-          </button>
-        </div>
-      </div>
-
-      <!-- Accordion / Dropdown Members Container -->
-      <div class="space-y-3" id="members-accordion-container">
-        <!-- Rendered by app.js -->
-      </div>
-    </section>
-
-    <!-- Section 3: 하단 마감일 캘린더 -->
-    <section class="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-4 sm:p-6 space-y-4">
-      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
-        <div>
-          <div class="flex items-center gap-2">
-            <h3 class="text-base font-black text-slate-900 flex items-center gap-2">
-              <span>📅</span> <span id="cal-month-title">2026년 11월</span> 구매부 마감일 캘린더
-            </h3>
-            <button onclick="goToToday()" class="text-xs px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold transition">오늘로 이동</button>
-          </div>
-          <p class="text-xs text-slate-400 mt-1">모든 팀원의 할 일 마감일이 달력에 실시간 표시됩니다. 특정 날짜를 클릭하여 일정을 필터링할 수 있습니다.</p>
-        </div>
-
-        <div class="flex items-center gap-2">
-          <!-- Calendar Filter by Member -->
-          <select id="cal-member-filter" onchange="handleCalMemberFilter(this.value)" class="text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-700 font-medium focus:ring-2 focus:ring-blue-500">
-            <option value="all">전체 팀원 마감일</option>
-            <!-- Populated dynamically -->
-          </select>
-
-          <!-- Month Nav -->
-          <div class="flex items-center gap-1 text-slate-500">
-            <button onclick="changeMonth(-1)" class="p-2 rounded-xl hover:bg-slate-100 border border-slate-200 transition" title="이전 달">
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
-            </button>
-            <button onclick="changeMonth(1)" class="p-2 rounded-xl hover:bg-slate-100 border border-slate-200 transition" title="다음 달">
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Selected Date Filter Banner -->
-      <div id="cal-filter-banner" class="hidden items-center justify-between px-4 py-2.5 rounded-xl bg-blue-50 border border-blue-200 text-xs text-blue-900 font-medium">
-        <span class="flex items-center gap-2">
-          <span>🎯</span> <strong id="cal-filter-date-text">2026-11-13</strong> 마감 업무 필터링 활성화
-        </span>
-        <button onclick="clearDateFilter()" class="text-blue-600 hover:text-blue-900 font-bold ml-2">필터 해제 ✕</button>
-      </div>
-
-      <!-- Days of Week Header -->
-      <div class="grid grid-cols-7 text-center text-xs font-bold text-slate-400 py-1 border-b border-slate-100">
-        <div class="text-red-500">일요일</div>
-        <div>월요일</div>
-        <div>화요일</div>
-        <div>수요일</div>
-        <div>목요일</div>
-        <div>금요일</div>
-        <div class="text-blue-500">토요일</div>
-      </div>
-
-      <!-- Calendar Days Grid -->
-      <div class="grid grid-cols-7 gap-1.5 text-xs" id="calendar-days">
-        <!-- Rendered by app.js -->
-      </div>
-
-      <!-- Calendar Legend -->
-      <div class="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500">
-        <div class="flex items-center gap-3">
-          <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-red-500"></span> 오늘 마감 / 긴급</span>
-          <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-blue-500"></span> 마감 예정</span>
-          <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> 완료됨</span>
-        </div>
-        <div class="text-slate-400 text-[11px]">
-          * 특정 날짜를 클릭하면 해당 일자에 마감 업무가 있는 담당자의 드롭다운이 자동으로 펼쳐집니다.
-        </div>
-      </div>
-    </section>
-
-    <!-- Section 4: 구매부 주간업무 보고 (Weekly Work Report & Free Notes Area - Matches image.png) -->
+    <!-- Section 1: 구매부 주간업무 보고 및 관리 (프로필 바로 밑 최상단 배치) -->
     <section id="weekly-report-section" class="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-4 sm:p-6 space-y-5">
       <!-- Section Header -->
       <div class="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-4 border-b border-slate-200">
@@ -393,11 +276,128 @@
       </div>
     </section>
 
+    <!-- Section 2: 구매부 조직도 (인원별 클릭 시 드롭다운 형태) -->
+    <section class="space-y-3">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <h2 class="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+            <span>👥</span> 구매부 조직원 및 담당 업무
+          </h2>
+          <span class="text-xs text-slate-400 font-normal hidden sm:inline">계정 생성 시 조직도에 자동 추가되며, 클릭 시 할 일 목록이 펼쳐집니다</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <button onclick="toggleAllAccordions()" id="btn-toggle-all" class="text-xs font-semibold px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 transition">
+            전체 펼치기 / 접기
+          </button>
+          <button onclick="openRegisterModal()" class="text-xs font-semibold px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 transition">
+            + 팀원 계정 등록 (조직도 추가)
+          </button>
+        </div>
+      </div>
+
+      <!-- Accordion / Dropdown Members Container -->
+      <div class="space-y-3" id="members-accordion-container">
+        <!-- Rendered by app.js -->
+      </div>
+    </section>
+
+    <!-- Section 3: 하단 마감일 캘린더 -->
+    <section class="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-4 sm:p-6 space-y-4">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+        <div>
+          <div class="flex items-center gap-2">
+            <h3 class="text-base font-black text-slate-900 flex items-center gap-2">
+              <span>📅</span> <span id="cal-month-title">2026년 11월</span> 구매부 마감일 캘린더
+            </h3>
+            <button onclick="goToToday()" class="text-xs px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold transition">오늘로 이동</button>
+          </div>
+          <p class="text-xs text-slate-400 mt-1">모든 팀원의 할 일 마감일이 달력에 실시간 표시됩니다. 특정 날짜를 클릭하여 일정을 필터링할 수 있습니다.</p>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <!-- Calendar Filter by Member -->
+          <select id="cal-member-filter" onchange="handleCalMemberFilter(this.value)" class="text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-700 font-medium focus:ring-2 focus:ring-blue-500">
+            <option value="all">전체 팀원 마감일</option>
+            <!-- Populated dynamically -->
+          </select>
+
+          <!-- Month Nav -->
+          <div class="flex items-center gap-1 text-slate-500">
+            <button onclick="changeMonth(-1)" class="p-2 rounded-xl hover:bg-slate-100 border border-slate-200 transition" title="이전 달">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
+            </button>
+            <button onclick="changeMonth(1)" class="p-2 rounded-xl hover:bg-slate-100 border border-slate-200 transition" title="다음 달">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Selected Date Filter Banner -->
+      <div id="cal-filter-banner" class="hidden items-center justify-between px-4 py-2.5 rounded-xl bg-blue-50 border border-blue-200 text-xs text-blue-900 font-medium">
+        <span class="flex items-center gap-2">
+          <span>🎯</span> <strong id="cal-filter-date-text">2026-11-13</strong> 마감 업무 필터링 활성화
+        </span>
+        <button onclick="clearDateFilter()" class="text-blue-600 hover:text-blue-900 font-bold ml-2">필터 해제 ✕</button>
+      </div>
+
+      <!-- Days of Week Header -->
+      <div class="grid grid-cols-7 text-center text-xs font-bold text-slate-400 py-1 border-b border-slate-100">
+        <div class="text-red-500">일요일</div>
+        <div>월요일</div>
+        <div>화요일</div>
+        <div>수요일</div>
+        <div>목요일</div>
+        <div>금요일</div>
+        <div class="text-blue-500">토요일</div>
+      </div>
+
+      <!-- Calendar Days Grid -->
+      <div class="grid grid-cols-7 gap-1.5 text-xs" id="calendar-days">
+        <!-- Rendered by app.js -->
+      </div>
+
+      <!-- Calendar Legend -->
+      <div class="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500">
+        <div class="flex items-center gap-3">
+          <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-red-500"></span> 오늘 마감 / 긴급</span>
+          <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-blue-500"></span> 마감 예정</span>
+          <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> 완료됨</span>
+        </div>
+        <div class="text-slate-400 text-[11px]">
+          * 특정 날짜를 클릭하면 해당 일자에 마감 업무가 있는 담당자의 드롭다운이 자동으로 펼쳐집니다.
+        </div>
+      </div>
+    </section>
+
+    <!-- Section 4: 전체 지시사항 하달 이력 피드 -->
+    <section class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+      <div onclick="toggleDirectivesFeed()" class="p-4 sm:p-4.5 flex items-center justify-between cursor-pointer hover:bg-slate-50/70 select-none transition">
+        <div class="flex items-center gap-2.5">
+          <span class="text-base">📢</span>
+          <div>
+            <h2 class="text-sm font-bold text-slate-900">구매부 지시사항 하달 이력</h2>
+            <p class="text-xs text-slate-400">발신된 지시사항 및 수신 담당자별 확인/처리 현황</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="text-xs font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-600" id="total-directives-badge">0건</span>
+          <div id="directives-feed-arrow" class="w-6 h-6 rounded flex items-center justify-center text-slate-400 transition transform">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+          </div>
+        </div>
+      </div>
+
+      <div id="directives-feed-content" class="hidden border-t border-slate-100 p-4 space-y-2.5 bg-slate-50/40">
+        <!-- Rendered by app.js -->
+      </div>
+    </section>
+
     <!-- Footer -->
     <footer class="bg-white border border-slate-200/80 rounded-2xl p-4 text-xs text-slate-500 flex flex-col md:flex-row md:items-center justify-between gap-2">
       <div class="flex items-center gap-2">
         <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
-        <span>ENEX 구매본부 통합 업무 관제 시스템</span>
+        <span>ENEX 구매부 주간업무 관리</span>
       </div>
       <div class="text-[11px] text-slate-400">
         24시간 실시간 무중단 서비스
@@ -415,7 +415,7 @@
             E
           </div>
           <div>
-            <h3 class="text-base font-bold text-slate-900">ENEX 구매부 관제 시스템 로그인</h3>
+            <h3 class="text-base font-bold text-slate-900">ENEX 구매부 주간업무 관리 로그인</h3>
             <p class="text-[11px] text-slate-500">본인 계정(아이디 또는 이메일)과 비밀번호를 입력해 로그인하세요.</p>
           </div>
         </div>

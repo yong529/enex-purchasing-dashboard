@@ -2022,7 +2022,7 @@ async function handleRegisterUser(e) {
       const welcomeTask = {
         id: `task-${Date.now()}`,
         member_id: newId,
-        title: `${name} ${title} 신규 업무 인수인계 및 부서 관제 시스템 등록`,
+        title: `${name} ${title} 신규 업무 인수인계 및 주간업무 관리 등록`,
         deadline: formatDate(today),
         priority: 'urgent',
         memo: '구매본부 자재 ERP 접속 권한 승인 및 담당 품목 단가표 숙지',
@@ -2094,7 +2094,7 @@ async function handleRegisterUser(e) {
   const welcomeTask = {
     id: `task-${Date.now()}`,
     member_id: newId,
-    title: `${name} ${title} 신규 업무 인수인계 및 부서 관제 시스템 등록`,
+    title: `${name} ${title} 신규 업무 인수인계 및 주간업무 관리 등록`,
     deadline: formatDate(today),
     priority: 'urgent',
     memo: '구매본부 자재 ERP 접속 권한 승인 및 담당 품목 단가표 숙지',
