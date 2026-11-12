@@ -259,6 +259,46 @@ function initSupabase() {
   return false;
 }
 
+// Robust helper to upsert a member to Supabase with schema-resilience
+async function upsertMemberToSupabase(m) {
+  if (!supabaseClient || !m || !m.id) return false;
+  const basePayload = {
+    id: String(m.id),
+    name: m.name || '팀원',
+    title: m.title || '사원',
+    role: m.role || '구매 담당',
+    icon: m.icon || '👤',
+    color: m.color || 'blue',
+    order_num: Number(m.order_num) || 1
+  };
+
+  const extendedPayload = {
+    ...basePayload,
+    username: m.username || m.id,
+    email: m.email || '',
+    is_admin: !!m.is_admin
+  };
+
+  try {
+    const { error } = await supabaseClient.from('members').upsert([extendedPayload]);
+    if (error) {
+      // If extended columns (username, email, is_admin) don't exist in Supabase DB schema, fall back to base columns
+      if (error.code === 'PGRST204' || String(error.message).includes('column')) {
+        const { error: baseErr } = await supabaseClient.from('members').upsert([basePayload]);
+        if (baseErr) console.warn('Supabase base member upsert notice:', baseErr);
+        return !baseErr;
+      } else {
+        console.warn('Supabase member upsert error:', error);
+        return false;
+      }
+    }
+    return true;
+  } catch (e) {
+    console.warn('upsertMemberToSupabase error:', e);
+    return false;
+  }
+}
+
 async function syncAuthUserWithProfile(authUser) {
   if (!authUser) return;
   const meta = authUser.user_metadata || {};
@@ -307,7 +347,7 @@ async function syncAuthUserWithProfile(authUser) {
   members = deduplicateMembers(members);
 
   if (supabaseClient) {
-    try { await supabaseClient.from('members').upsert([member]); } catch (e) {}
+    await upsertMemberToSupabase(member);
   }
 
   currentUserId = member.id;
@@ -370,7 +410,7 @@ async function fetchSupabaseData() {
     // Ensure Admin 'yong' is always present in members and synced to Supabase
     if (!members.some(m => m.username === 'yong' || m.id === 'admin-yong')) {
       members.unshift(JSON.parse(JSON.stringify(ADMIN_USER)));
-      supabaseClient.from('members').upsert([ADMIN_USER]).then(() => {});
+      upsertMemberToSupabase(ADMIN_USER);
     }
     members = deduplicateMembers(members);
 
@@ -1306,6 +1346,12 @@ async function handleQuickAddTask(e, memberId) {
   // 2. Sync to Supabase in background
   if (supabaseClient) {
     try {
+      // Ensure member exists in public.members to satisfy FK constraint
+      const memberObj = members.find(m => m.id === memberId);
+      if (memberObj) {
+        await upsertMemberToSupabase(memberObj);
+      }
+
       const dbPayload = {
         id: newTask.id,
         member_id: newTask.member_id,
@@ -1319,6 +1365,10 @@ async function handleQuickAddTask(e, memberId) {
       const { data, error } = await supabaseClient.from('tasks').insert([dbPayload]).select();
       if (error) {
         console.warn('Supabase task insert warning:', error);
+        if (error.code === '23503' || String(error.message).includes('foreign key')) {
+          if (memberObj) await upsertMemberToSupabase(memberObj);
+          await supabaseClient.from('tasks').insert([dbPayload]);
+        }
       } else if (data && data[0]) {
         const idx = tasks.findIndex(t => t.id === newTask.id);
         if (idx !== -1) {
@@ -1886,8 +1936,8 @@ async function handleRegisterUser(e) {
         created_at: new Date().toISOString()
       };
 
-      // Add to public.members in Supabase
-      await supabaseClient.from('members').upsert([newMember]);
+      // Add to public.members in Supabase with schema resilience
+      await upsertMemberToSupabase(newMember);
 
       // Add initial onboarding task
       const welcomeTask = {
