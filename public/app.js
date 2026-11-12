@@ -1368,6 +1368,7 @@ async function handleRegisterUser(e) {
         email: fullEmail,
         password: password,
         options: {
+          emailRedirectTo: window.location.origin,
           data: { name, title, role, icon, color, username }
         }
       });
