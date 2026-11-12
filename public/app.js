@@ -2106,11 +2106,12 @@ async function handleRegisterUser(e) {
     return;
   }
 
-  // Check if username/email/name already exists
+  // Check if username/email/name already exists among active non-deleted members
   const existing = members.find(m => 
-    (m.username && m.username.toLowerCase() === username.toLowerCase()) || 
+    !isMemberDeleted(m.id, m.email, m.username) &&
+    ((m.username && m.username.toLowerCase() === username.toLowerCase()) || 
     (m.email && m.email.toLowerCase() === fullEmail.toLowerCase()) ||
-    (m.name && m.title && m.name.toLowerCase() === name.toLowerCase() && m.title.toLowerCase() === title.toLowerCase() && m.username !== 'yong')
+    (m.name && m.title && m.name.toLowerCase() === name.toLowerCase() && m.title.toLowerCase() === title.toLowerCase() && m.username !== 'yong'))
   );
   if (existing) {
     alert(`이미 등록된 팀원 또는 아이디입니다: [${existing.name} ${existing.title} (@${existing.username || existing.email})]\n로그인 창에서 해당 계정으로 접속해 주세요.`);
@@ -2132,11 +2133,117 @@ async function handleRegisterUser(e) {
       });
 
       if (authErr) {
-        if (authErr.message.toLowerCase().includes('already registered')) {
-          alert(`이미 등록된 계정입니다 (${fullEmail}).\n로그인 창에서 비밀번호를 입력해 접속해 주세요.`);
-          closeRegisterModal();
-          openLoginModal();
-          return;
+        const errMsg = (authErr.message || '').toLowerCase();
+        if (errMsg.includes('already registered') || errMsg.includes('already exists')) {
+          // If the account was previously deleted, revive and re-register it!
+          let signInResult = null;
+          try {
+            signInResult = await supabaseClient.auth.signInWithPassword({
+              email: fullEmail,
+              password: password
+            });
+          } catch (e) {}
+
+          // If failed with entered password, also attempt common fallback passwords (1234 or 123456)
+          if (!signInResult?.data?.session) {
+            try {
+              signInResult = await supabaseClient.auth.signInWithPassword({
+                email: fullEmail,
+                password: '1234'
+              });
+            } catch (e) {}
+          }
+          if (!signInResult?.data?.session) {
+            try {
+              signInResult = await supabaseClient.auth.signInWithPassword({
+                email: fullEmail,
+                password: '123456'
+              });
+            } catch (e) {}
+          }
+
+          if (signInResult?.data?.session?.user) {
+            const restoredUser = signInResult.data.user;
+            const restoredId = restoredUser.id;
+
+            // 1. Update user password and metadata to newly submitted profile
+            try {
+              await supabaseClient.auth.updateUser({
+                password: password,
+                data: { name, title, role, icon, color, username }
+              });
+            } catch (e) {}
+
+            // 2. Clear any prior deletion revocation from local state and Supabase Cloud
+            deletedMembers = deletedMembers.filter(d => 
+              d.id !== restoredId && 
+              (!d.email || d.email.toLowerCase() !== fullEmail.toLowerCase()) &&
+              (!d.username || d.username.toLowerCase() !== username.toLowerCase())
+            );
+            saveDeletedMembersLocalState();
+
+            try {
+              await supabaseClient.from('directives').delete().eq('id', `deleted-member-${restoredId}`);
+              await supabaseClient.from('directives').delete().eq('target_id', `deleted_member:${restoredId}`);
+              if (fullEmail) {
+                await supabaseClient.from('directives').delete().like('content', `%"email":"${fullEmail}"%`);
+              }
+            } catch (e) {}
+
+            // 3. Upsert member into Supabase members table
+            const restoredMember = {
+              id: restoredId,
+              username,
+              email: fullEmail,
+              name,
+              title,
+              role,
+              icon,
+              color,
+              order_num: members.length + 1,
+              created_at: new Date().toISOString()
+            };
+            await upsertMemberToSupabase(restoredMember);
+
+            // 4. Add welcome task
+            const welcomeTask = {
+              id: `task-${Date.now()}`,
+              member_id: restoredId,
+              title: `${name} ${title} 업무 복귀 및 주간업무 관리 재등록`,
+              deadline: formatDate(today),
+              priority: 'urgent',
+              memo: '구매본부 자재 ERP 접속 권한 승인 및 담당 품목 단가표 숙지',
+              is_completed: false,
+              created_at: new Date().toISOString()
+            };
+            try { await supabaseClient.from('tasks').insert([welcomeTask]); } catch (e) {}
+
+            // 5. Update local state and UI
+            members = members.filter(m => m.id !== restoredId && m.username !== username && m.email !== fullEmail);
+            members.push(restoredMember);
+            members = deduplicateMembers(members);
+            tasks.unshift(welcomeTask);
+            expandedMemberIds.add(restoredId);
+            currentUserId = restoredId;
+            sessionStorage.setItem('enex_current_user_id', restoredId);
+            localStorage.removeItem('enex_current_user_id');
+            saveLocalState();
+
+            closeRegisterModal();
+            renderAll();
+
+            alert(`🎉 [${name} ${title}] 계정이 성공적으로 재등록(부활)되어 구매부 조직도에 추가되었습니다!\n이제 해당 계정으로 정상 로그인 및 업무 작성이 가능합니다.`);
+            setTimeout(() => {
+              const cardEl = document.getElementById(`member-card-${restoredId}`);
+              if (cardEl) cardEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }, 200);
+            return;
+          } else {
+            alert(`해당 아이디(${username})는 이전에 등록된 이력이 있습니다.\n기존에 가입하셨을 때 사용하신 비밀번호를 입력해 주시면 계정이 즉시 복구(재등록)됩니다.\n(또는 로그인 창에서 기존 비밀번호로 접속해 보세요)`);
+            closeRegisterModal();
+            openLoginModal();
+            return;
+          }
         }
         alert('Supabase Auth 가입 오류: ' + authErr.message);
         return;
@@ -2234,6 +2341,14 @@ async function handleRegisterUser(e) {
     order_num: members.length + 1,
     created_at: new Date().toISOString()
   };
+
+  // Clear any prior deleted revocation record if re-registering
+  deletedMembers = deletedMembers.filter(d => 
+    d.id !== newId && 
+    (!d.email || d.email.toLowerCase() !== fullEmail.toLowerCase()) &&
+    (!d.username || d.username.toLowerCase() !== username.toLowerCase())
+  );
+  saveDeletedMembersLocalState();
 
   members = members.filter(m => 
     m.id !== newId && 
