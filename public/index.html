@@ -425,6 +425,9 @@
         </button>
       </div>
 
+      <!-- Supabase Connection Status Banner -->
+      <div id="login-supabase-alert"></div>
+
       <!-- Quick 1-Click Select List (for registered team members) -->
       <div class="space-y-1.5" id="login-accounts-section">
         <div class="flex items-center justify-between">
@@ -487,6 +490,9 @@
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
         </button>
       </div>
+
+      <!-- Register Supabase Status Banner -->
+      <div id="reg-supabase-alert"></div>
 
       <form id="register-form" onsubmit="handleRegisterUser(event)" class="space-y-3 text-xs">
         <div class="grid grid-cols-2 gap-3">
@@ -688,6 +694,17 @@
         <p>
           Supabase 프로젝트 정보를 입력하시면 브라우저를 새로고침해도 전 직원의 데이터가 실시간으로 동기화됩니다.
         </p>
+
+        <div class="bg-amber-50 p-2.5 rounded-xl border border-amber-200 text-[11px] text-amber-900 leading-normal space-y-1">
+          <div class="font-bold flex items-center gap-1 text-amber-950">
+            <span>🔑</span> Supabase Anon Key 확인 방법
+          </div>
+          <p class="text-[10px] text-amber-800">
+            1. Supabase 대시보드 (<a href="https://supabase.com/dashboard/project/lnilzitmifivbhauepac" target="_blank" class="underline text-blue-700 font-bold">콘솔 바로가기</a>) 접속<br>
+            2. 좌측 하단 <strong>Project Settings (⚙️ 설정) &gt; API</strong> 클릭<br>
+            3. <strong>Project API Keys</strong> 에서 <code>anon</code> <code>public</code> 키를 복사하여 아래에 붙여넣기
+          </p>
+        </div>
 
         <div class="bg-blue-50/60 p-3 rounded-xl border border-blue-200 space-y-2">
           <div>
