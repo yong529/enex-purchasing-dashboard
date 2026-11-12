@@ -2314,10 +2314,7 @@ const DEFAULT_WEEKLY_SAMPLE = {
   notes: `PB 단가 인상 협의 차주 마무리 예정`
 };
 
-const DEFAULT_COMMON_NOTES = `[구매부 주간 현안 및 비고]
-• PB 공급사 단가 인상 관련: 주요 원자재 가격 동향 모니터링 및 추가 인상 억제 방안 검토 중
-• 조명 및 전기자재: 특판 현장 맞춤형 친환경 고효율 모델 우선 적용 추진
-• 11월 4주차 구매 실무 교육 이수 완료 (친환경 표지인증)`;
+const DEFAULT_COMMON_NOTES = '';
 
 function getWeekInfo(baseDate = new Date()) {
   const d = new Date(baseDate);
@@ -2649,20 +2646,24 @@ function renderWeeklyReport() {
   const commonNotesObj = weeklyCommonNotes[currentReportWeekId];
   const freeNotesInput = document.getElementById('weekly-free-notes-input');
   const freeNotesMeta = document.getElementById('weekly-free-notes-meta');
+  if (commonNotesObj && typeof commonNotesObj.notes === 'string') {
+    if (commonNotesObj.notes.includes('PB/원자재') || commonNotesObj.notes.includes('[구매부 공통 특이사항]')) {
+      commonNotesObj.notes = '';
+      saveWeeklyLocalState();
+    }
+  }
   if (freeNotesInput && document.activeElement !== freeNotesInput) {
     if (commonNotesObj && typeof commonNotesObj.notes === 'string') {
       freeNotesInput.value = commonNotesObj.notes;
-    } else if (!localStorage.getItem('enex_weekly_notes_seeded_v2')) {
-      freeNotesInput.value = DEFAULT_COMMON_NOTES;
     } else {
       freeNotesInput.value = '';
     }
   }
   if (freeNotesMeta) {
-    if (commonNotesObj && commonNotesObj.updated_at) {
+    if (commonNotesObj && commonNotesObj.updated_at && commonNotesObj.notes && commonNotesObj.notes.trim()) {
       freeNotesMeta.textContent = `최종 저장: ${commonNotesObj.updated_by || '담당자'} (${new Date(commonNotesObj.updated_at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })})`;
     } else {
-      freeNotesMeta.textContent = `기본 공유 비고 표시 중`;
+      freeNotesMeta.textContent = `작성된 공통 특이사항 없음`;
     }
   }
 
@@ -2954,22 +2955,19 @@ function copyWeeklyReportText() {
   let text = `[구매부 주간업무 보고]\n기간: ${range}\n=========================================\n\n`;
 
   teamMembers.forEach(m => {
-    const rep = weeklyReports.find(r => r.week_id === currentReportWeekId && (r.member_id === m.id || r.member_id === m.username));
-    text += `■ ${m.name} (${m.title}) - ${m.role}\n`;
+    const rep = weeklyReports.find(r => 
+      r.week_id === currentReportWeekId && 
+      (r.member_id === m.id || (m.username && r.member_id === m.username) || (m.name && r.member_name === m.name))
+    );
+    text += `■ ${m.name} (${m.title}) - ${m.role || '구매부'}\n`;
     text += `[금주 계획]\n${(rep && rep.plan_this_week) ? rep.plan_this_week : '(계획 없음)'}\n\n`;
     text += `[금주 실적]\n${(rep && rep.performance_this_week) ? rep.performance_this_week : '(실적 없음)'}\n\n`;
-    text += `[차주 계획]\n${(rep && rep.plan_next_week) ? rep.plan_next_week : '(계획 없음)'}\n\n`;
-    if (rep && rep.notes) {
-      text += `[개인 비고] ${rep.notes}\n\n`;
-    }
+    text += `[차주 계획]\n${(rep && rep.plan_next_week) ? rep.plan_next_week : '(계획 없음)'}\n`;
     text += `-----------------------------------------\n`;
   });
 
-  const commonNotes = weeklyCommonNotes[currentReportWeekId]?.notes || DEFAULT_COMMON_NOTES;
-  text += `■ 특이사항 및 주간 공유 비고\n${commonNotes}\n=========================================`;
-
   navigator.clipboard.writeText(text).then(() => {
-    alert('📋 주간업무 보고서 전문이 클립보드에 복사되었습니다!\n사내 메신저나 이메일에 바로 [붙여넣기(Ctrl+V)] 하실 수 있습니다.');
+    alert('📋 주간업무 계획 및 실적표가 클립보드에 복사되었습니다! (비고란 제외)\n사내 메신저나 이메일에 바로 [붙여넣기(Ctrl+V)] 하실 수 있습니다.');
   }).catch(() => {
     alert('클립보드 복사에 실패했습니다. 수동으로 텍스트를 복사해 주세요.');
   });

@@ -40,8 +40,9 @@
         border: 2px solid #000000 !important;
         box-shadow: none !important;
       }
-      .no-print {
+      .no-print, .no-print * {
         display: none !important;
+        visibility: hidden !important;
       }
     }
   </style>
@@ -238,8 +239,8 @@
           </table>
         </div>
 
-        <!-- Bottom Free Space (여백 영역): 특이사항 및 주간 공유 비고 (Exact match to user's request) -->
-        <div class="border-t-2 border-slate-700 p-4 sm:p-5 bg-slate-50/70 space-y-3.5">
+        <!-- Bottom Free Space (여백 영역): 특이사항 및 주간 공유 비고 (인쇄 시 제외) -->
+        <div class="no-print border-t-2 border-slate-700 p-4 sm:p-5 bg-slate-50/70 space-y-3.5">
           <div class="flex items-center justify-between pb-2 border-b border-slate-200">
             <div class="flex items-center gap-2">
               <span class="text-sm font-black text-slate-900">📝 특이사항 및 주간 공유 비고 (여백 영역)</span>
@@ -256,7 +257,7 @@
             <div class="md:col-span-2 space-y-1.5">
               <label class="block text-[11px] font-bold text-slate-700">부서 공통 종합 특이사항 (자유 메모란)</label>
               <textarea id="weekly-free-notes-input" rows="5" 
-                placeholder="[구매부 공통 특이사항]&#10;1. PB/원자재 공급사 단가 인상 협의 진행 경과...&#10;2. 주요 협력사 납기 동향 및 품질 이슈...&#10;3. 차주 부서 회의 일정 등 편하게 작성하세요."
+                placeholder="부서 공통 특이사항이나 전달사항을 입력하세요."
                 class="w-full bg-white border border-slate-300 rounded-xl p-3 text-xs text-slate-800 leading-relaxed focus:ring-2 focus:ring-blue-500 focus:outline-none"></textarea>
               <div class="flex items-center justify-between text-[11px] text-slate-400">
                 <span id="weekly-free-notes-meta">최종 저장: 없음</span>
