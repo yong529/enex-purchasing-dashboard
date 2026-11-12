@@ -2874,10 +2874,15 @@ function renderWeeklyReport() {
         </td>
       `;
     } else {
-      // View Mode (Matches image.png)
-      const planText = rep && rep.plan_this_week ? escapeHtml(rep.plan_this_week) : '<span class="text-slate-300 italic no-print">(등록된 계획이 없습니다)</span>';
-      const perfText = rep && rep.performance_this_week ? formatPerformanceBadges(rep.performance_this_week) : '<span class="text-slate-300 italic no-print">-</span>';
-      const nextText = rep && rep.plan_next_week ? escapeHtml(rep.plan_next_week) : '<span class="text-slate-300 italic no-print">(등록된 계획이 없습니다)</span>';
+      const planText = rep && rep.plan_this_week && rep.plan_this_week.trim() 
+        ? escapeHtml(rep.plan_this_week.trim()) 
+        : '<span class="text-slate-300 italic no-print">(등록된 계획이 없습니다)</span>';
+      const perfText = rep && rep.performance_this_week && rep.performance_this_week.trim() 
+        ? formatPerformanceBadges(rep.performance_this_week.trim()) 
+        : '<span class="text-slate-300 italic no-print">-</span>';
+      const nextText = rep && rep.plan_next_week && rep.plan_next_week.trim() 
+        ? escapeHtml(rep.plan_next_week.trim()) 
+        : '<span class="text-slate-300 italic no-print">(등록된 계획이 없습니다)</span>';
 
       tr.innerHTML = `
         <td class="p-3 border-r border-b border-slate-400 bg-sky-50 text-center font-bold text-slate-900 align-middle w-[14%]">
@@ -2895,15 +2900,9 @@ function renderWeeklyReport() {
             `}
           </div>
         </td>
-        <td class="p-3 sm:p-4 border-r border-b border-slate-400 align-top text-xs leading-relaxed whitespace-pre-wrap font-sans text-slate-900 w-[40%]">
-          ${planText}
-        </td>
-        <td class="p-2.5 border-r border-b border-slate-400 align-middle text-center text-xs font-bold leading-loose whitespace-pre-wrap w-[10%]">
-          ${perfText}
-        </td>
-        <td class="p-3 sm:p-4 border-b border-slate-400 align-top text-xs leading-relaxed whitespace-pre-wrap font-sans text-slate-900 w-[36%]">
-          ${nextText}
-        </td>
+        <td class="p-3 sm:p-4 border-r border-b border-slate-400 align-top text-xs leading-relaxed whitespace-pre-wrap font-sans text-slate-900 w-[40%]">${planText}</td>
+        <td class="p-2.5 border-r border-b border-slate-400 align-middle text-center text-xs font-bold leading-loose whitespace-pre-wrap w-[10%]">${perfText}</td>
+        <td class="p-3 sm:p-4 border-b border-slate-400 align-top text-xs leading-relaxed whitespace-pre-wrap font-sans text-slate-900 w-[36%]">${nextText}</td>
       `;
     }
 
