@@ -24,10 +24,26 @@ loadWeeklyLocalState();
 let deletedMembers = [];
 loadDeletedMembersLocalState();
 
-function isMemberDeleted(memberId, email, username) {
-  if (!memberId && !email && !username) return false;
+function isMemberDeleted(memberId, email, username, name) {
+  if (!memberId && !email && !username && !name) return false;
   const cleanEmail = (email || '').toLowerCase().trim();
   const cleanUser = (username || '').toLowerCase().trim();
+  const cleanName = (name || '').toLowerCase().trim();
+
+  // If this person currently exists in the active `members` list (from Supabase `public.members`),
+  // they are an active member and MUST NOT be treated as deleted!
+  if (Array.isArray(members) && members.length > 0) {
+    const isActiveInMembers = members.some(m => {
+      if (!m) return false;
+      if (memberId && m.id === memberId) return true;
+      if (cleanEmail && m.email && m.email.toLowerCase().trim() === cleanEmail) return true;
+      if (cleanUser && m.username && m.username.toLowerCase().trim() === cleanUser) return true;
+      if (cleanName && m.name && m.name.toLowerCase().trim() === cleanName) return true;
+      return false;
+    });
+    if (isActiveInMembers) return false;
+  }
+
   return deletedMembers.some(d => {
     if (memberId && d.id && d.id === memberId) return true;
     if (cleanEmail && d.email && d.email.toLowerCase().trim() === cleanEmail) return true;
@@ -381,10 +397,33 @@ async function syncAuthUserWithProfile(authUser) {
   if (!authUser) return;
   const meta = authUser.user_metadata || {};
   const metaUsername = meta.username || (authUser.email ? authUser.email.split('@')[0] : '');
+  const metaName = (meta.name || '').trim();
 
-  // If this user was deleted, forcefully sign out and do not auto-create
-  if (isMemberDeleted(authUser.id, authUser.email, metaUsername)) {
-    console.warn('syncAuthUserWithProfile: User is marked as deleted. Signing out:', authUser.email);
+  // Look up existing member by auth id, email, username, or name
+  let member = members.find(m => 
+    m.id === authUser.id || 
+    (m.email && authUser.email && m.email.toLowerCase() === authUser.email.toLowerCase()) ||
+    (metaUsername && m.username && m.username.toLowerCase() === metaUsername.toLowerCase()) ||
+    (metaName && m.name && m.name.trim() === metaName)
+  );
+
+  if (!member && supabaseClient) {
+    try {
+      const { data } = await supabaseClient.from('members').select('*');
+      if (data && data.length > 0) {
+        member = data.find(m => 
+          m.id === authUser.id || 
+          (m.email && authUser.email && m.email.toLowerCase() === authUser.email.toLowerCase()) ||
+          (metaUsername && m.username && m.username.toLowerCase() === metaUsername.toLowerCase()) ||
+          (metaName && m.name && m.name.trim() === metaName)
+        );
+      }
+    } catch (e) {}
+  }
+
+  // Only block if NOT in members AND explicitly marked as deleted
+  if (!member && isMemberDeleted(authUser.id, authUser.email, metaUsername, metaName)) {
+    console.warn('syncAuthUserWithProfile: User is marked as deleted and not in members. Signing out:', authUser.email);
     if (supabaseClient) {
       try { await supabaseClient.auth.signOut(); } catch (e) {}
     }
@@ -396,35 +435,26 @@ async function syncAuthUserWithProfile(authUser) {
     return;
   }
 
-  // Look up existing member by auth id, email, or username
-  let member = members.find(m => 
-    !isMemberDeleted(m.id, m.email, m.username) &&
-    (m.id === authUser.id || 
-    (m.email && authUser.email && m.email.toLowerCase() === authUser.email.toLowerCase()) ||
-    (metaUsername && m.username && m.username.toLowerCase() === metaUsername.toLowerCase()))
-  );
-
-  if (!member && supabaseClient) {
-    try {
-      const { data } = await supabaseClient.from('members').select('*').or(`id.eq.${authUser.id},email.eq.${authUser.email}`);
-      if (data && data.length > 0 && !isMemberDeleted(data[0].id, data[0].email, data[0].username)) {
-        member = data[0];
-      }
-    } catch (e) {}
-  }
-
   if (member) {
+    // Clear any stale deletion records for this active member
+    deletedMembers = deletedMembers.filter(d => 
+      d.id !== member.id && 
+      d.id !== authUser.id &&
+      (!d.email || !authUser.email || d.email.toLowerCase() !== authUser.email.toLowerCase()) &&
+      (!d.name || d.name !== member.name)
+    );
+    saveDeletedMembersLocalState();
+
     // Update existing member object in place
-    member.id = authUser.id;
     if (authUser.email) member.email = authUser.email;
-    if (meta.name) member.name = meta.name;
-    if (meta.title) member.title = meta.title;
-    if (meta.role) member.role = meta.role;
-    if (meta.icon) member.icon = meta.icon;
-    if (meta.color) member.color = meta.color;
-    if (metaUsername) member.username = metaUsername;
+    if (meta.name && !member.name) member.name = meta.name;
+    if (meta.title && !member.title) member.title = meta.title;
+    if (meta.role && !member.role) member.role = meta.role;
+    if (meta.icon && !member.icon) member.icon = meta.icon;
+    if (meta.color && !member.color) member.color = meta.color;
+    if (metaUsername && !member.username) member.username = metaUsername;
   } else {
-    // If not found in members table, DO NOT auto-create/resurrect!
+    // If not found in members table, sign out cleanly
     console.warn('syncAuthUserWithProfile: Auth user not in members table, signing out:', authUser.email);
     if (supabaseClient) {
       try { await supabaseClient.auth.signOut(); } catch (e) {}
@@ -468,23 +498,70 @@ async function fetchSupabaseData() {
       supabaseClient.from('directives').delete().in('id', LEGACY_MOCK_DIR_IDS).then(() => {});
     } catch (e) {}
 
+    // 1. In-memory filter out legacy demo items from remote members table and deduplicate
+    // Note: Supabase `members` table is the authoritative source of active members.
+    if (mRes.data) {
+      members = deduplicateMembers(mRes.data.filter(m => !isLegacyDemo(m)));
+
+      // Clean up any duplicate member rows in remote Supabase Cloud table in background
+      try {
+        const seenRemote = new Set();
+        const dupIdsToDelete = [];
+        for (const m of mRes.data) {
+          if (!m || isLegacyDemo(m)) continue;
+          const key = (m.email || m.username || `${m.name}_${m.title}`).toLowerCase();
+          if (seenRemote.has(key)) {
+            dupIdsToDelete.push(m.id);
+          } else {
+            seenRemote.add(key);
+          }
+        }
+        if (dupIdsToDelete.length > 0) {
+          supabaseClient.from('members').delete().in('id', dupIdsToDelete).then(() => {
+            console.log('Cleaned up duplicate member rows in Supabase Cloud:', dupIdsToDelete);
+          });
+        }
+      } catch (cleanErr) {}
+    }
+
     if (dRes.data) {
-      // 1. Parse deleted member revocation records
+      // 2. Parse deleted member revocation records, ignoring any member currently active in `members`
+      const staleDeleteDirectiveIds = [];
+      const freshDeletedList = [];
+
       dRes.data.forEach(d => {
         if (d.title === '__deleted_member__' || d.id?.startsWith('deleted-member-') || d.target_id?.startsWith('deleted_member:')) {
           try {
             const delObj = typeof d.content === 'string' ? JSON.parse(d.content) : d.content;
-            if (delObj && (delObj.id || delObj.email)) {
-              if (!deletedMembers.some(x => (delObj.id && x.id === delObj.id) || (delObj.email && x.email && x.email.toLowerCase() === delObj.email.toLowerCase()))) {
-                deletedMembers.push(delObj);
+            if (delObj && (delObj.id || delObj.email || delObj.name)) {
+              const isCurrentlyActive = members.some(m => 
+                (delObj.id && m.id === delObj.id) ||
+                (delObj.email && m.email && m.email.toLowerCase() === delObj.email.toLowerCase()) ||
+                (delObj.username && m.username && m.username.toLowerCase() === delObj.username.toLowerCase()) ||
+                (delObj.name && m.name && m.name.trim() === delObj.name.trim())
+              );
+              if (isCurrentlyActive) {
+                staleDeleteDirectiveIds.push(d.id);
+              } else {
+                freshDeletedList.push(delObj);
               }
             }
           } catch (e) {}
         }
       });
+
+      deletedMembers = freshDeletedList;
       saveDeletedMembersLocalState();
 
-      // 2. Parse weekly reports and weekly common notes synced via directives
+      if (staleDeleteDirectiveIds.length > 0) {
+        try {
+          supabaseClient.from('directives').delete().in('id', staleDeleteDirectiveIds).then(() => {
+            console.log('Purged stale deleted-member directives for active members:', staleDeleteDirectiveIds);
+          });
+        } catch (e) {}
+      }
+
+      // 3. Parse weekly reports and weekly common notes synced via directives
       dRes.data.forEach(d => {
         if (d.title === '__weekly_report__' || d.id?.startsWith('report-') || d.target_id?.startsWith('weekly_report:')) {
           try {
@@ -525,42 +602,8 @@ async function fetchSupabaseData() {
       saveWeeklyLocalState();
     }
 
-    // In-memory filter out legacy demo items and deleted members, and deduplicate
-    if (mRes.data) {
-      members = deduplicateMembers(mRes.data.filter(m => !isLegacyDemo(m) && !isMemberDeleted(m.id, m.email, m.username)));
-
-      // Clean up any lingering deleted member rows or duplicate member rows in remote Supabase Cloud table in background
-      try {
-        const lingeringDeletedIds = mRes.data
-          .filter(m => isMemberDeleted(m.id, m.email, m.username))
-          .map(m => m.id);
-        if (lingeringDeletedIds.length > 0) {
-          supabaseClient.from('members').delete().in('id', lingeringDeletedIds).then(() => {
-            console.log('Purged lingering deleted member rows from Supabase Cloud:', lingeringDeletedIds);
-          });
-        }
-
-        const seenRemote = new Set();
-        const dupIdsToDelete = [];
-        for (const m of mRes.data) {
-          if (!m || isLegacyDemo(m) || isMemberDeleted(m.id, m.email, m.username)) continue;
-          const key = (m.email || m.username || `${m.name}_${m.title}`).toLowerCase();
-          if (seenRemote.has(key)) {
-            dupIdsToDelete.push(m.id);
-          } else {
-            seenRemote.add(key);
-          }
-        }
-        if (dupIdsToDelete.length > 0) {
-          supabaseClient.from('members').delete().in('id', dupIdsToDelete).then(() => {
-            console.log('Cleaned up duplicate member rows in Supabase Cloud:', dupIdsToDelete);
-          });
-        }
-      } catch (cleanErr) {}
-    }
-
     if (tRes.data) {
-      tasks = tRes.data.filter(t => !LEGACY_MOCK_TASK_IDS.includes(t.id) && !isMemberDeleted(t.member_id));
+      tasks = tRes.data.filter(t => !LEGACY_MOCK_TASK_IDS.includes(t.id));
     }
 
     // Ensure Admin 'yong' is always present in members and synced to Supabase
@@ -1948,16 +1991,6 @@ async function handleDirectLogin(e) {
 
   const fullEmail = loginInput.includes('@') ? loginInput : `${loginInput}@enex.co.kr`;
 
-  // Pre-check: If user is marked as deleted/revoked
-  if (isMemberDeleted(null, fullEmail, loginInput)) {
-    alert(`❌ 관리자에 의해 영구 삭제된 계정입니다 (${loginInput}).\n해당 계정으로는 대시보드에 로그인할 수 없습니다.`);
-    if (submitBtn) {
-      submitBtn.disabled = false;
-      submitBtn.innerHTML = '<span>로그인하기</span>';
-    }
-    return;
-  }
-
   // 1. Try Supabase Auth first if connected
   if (supabaseClient) {
     try {
@@ -1971,38 +2004,66 @@ async function handleDirectLogin(e) {
         const authUser = data.user;
         const meta = authUser.user_metadata || {};
         const metaUsername = meta.username || authUser.email.split('@')[0];
+        const metaName = (meta.name || '').trim();
 
-        // Check if deleted
-        if (isMemberDeleted(authUser.id, authUser.email, metaUsername)) {
-          console.warn('Blocked deleted user from logging in:', authUser.email);
-          await supabaseClient.auth.signOut();
-          alert(`❌ 관리자에 의해 삭제된 계정입니다 (${authUser.email}).\n접속 권한이 영구 차단되었습니다.`);
-          if (submitBtn) {
-            submitBtn.disabled = false;
-            submitBtn.innerHTML = '<span>로그인하기</span>';
-          }
-          return;
-        }
-
+        // Find matching member in active members list (by id, email, username, or name)
         let member = members.find(m => 
-          !isMemberDeleted(m.id, m.email, m.username) &&
-          (m.id === authUser.id || 
+          m.id === authUser.id || 
           (m.email && m.email.toLowerCase() === authUser.email.toLowerCase()) ||
-          (metaUsername && m.username && m.username.toLowerCase() === metaUsername.toLowerCase()))
+          (metaUsername && m.username && m.username.toLowerCase() === metaUsername.toLowerCase()) ||
+          (metaName && m.name && m.name.trim() === metaName) ||
+          (m.name && m.name.trim() === loginInput)
         );
 
-        if (!member) {
-          // If authenticated in Supabase Auth but NOT listed in members table,
-          // this user was deleted by admin or is not an approved member.
-          console.warn('Blocked unlisted/deleted user from logging in:', authUser.email);
-          await supabaseClient.auth.signOut();
-          alert(`❌ 관리자에 의해 삭제되었거나 승인되지 않은 계정입니다.\n해당 계정으로는 로그인할 수 없습니다.`);
+        // If member is found in active members list, allow login and clear any stale deletion markers!
+        if (member) {
+          deletedMembers = deletedMembers.filter(d => 
+            d.id !== member.id && 
+            d.id !== authUser.id &&
+            (!d.email || d.email.toLowerCase() !== authUser.email.toLowerCase()) &&
+            (!d.name || d.name !== member.name)
+          );
+          saveDeletedMembersLocalState();
+
+          changeCurrentUser(member.id);
+          closeLoginModal();
+          alert(`🔑 [${member.name} ${member.title}] 님 환영합니다!\nSupabase 클라우드 실시간 인증으로 로그인되었습니다.`);
           if (submitBtn) {
             submitBtn.disabled = false;
             submitBtn.innerHTML = '<span>로그인하기</span>';
           }
           return;
         }
+
+        // If NOT found in members list, check if explicitly deleted by admin
+        if (isMemberDeleted(authUser.id, authUser.email, metaUsername, metaName)) {
+          console.warn('Blocked deleted user from logging in:', authUser.email);
+          await supabaseClient.auth.signOut();
+          alert(`❌ 관리자에 의해 삭제된 계정입니다 (${authUser.email}).\n다시 이용하시려면 아래 [+ 새 팀원 계정 등록]을 눌러 재등록해 주세요.`);
+          if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = '<span>로그인하기</span>';
+          }
+          return;
+        }
+
+        // If authenticated in Supabase Auth and NOT explicitly deleted, auto-link/restore profile from Auth metadata
+        member = {
+          id: authUser.id,
+          email: authUser.email,
+          username: metaUsername || authUser.email.split('@')[0],
+          name: metaName || metaUsername || authUser.email.split('@')[0],
+          title: meta.title || '사원',
+          role: meta.role || '구매 관리 및 발주 담당',
+          icon: meta.icon || '🧑‍💼',
+          color: meta.color || 'blue',
+          order_num: members.length + 1,
+          created_at: new Date().toISOString()
+        };
+        members.push(member);
+        members = deduplicateMembers(members);
+        await upsertMemberToSupabase(member);
+        saveLocalState();
 
         changeCurrentUser(member.id);
         closeLoginModal();
@@ -2178,7 +2239,8 @@ async function handleRegisterUser(e) {
             deletedMembers = deletedMembers.filter(d => 
               d.id !== restoredId && 
               (!d.email || d.email.toLowerCase() !== fullEmail.toLowerCase()) &&
-              (!d.username || d.username.toLowerCase() !== username.toLowerCase())
+              (!d.username || d.username.toLowerCase() !== username.toLowerCase()) &&
+              (!d.name || d.name.trim() !== name)
             );
             saveDeletedMembersLocalState();
 
@@ -2187,6 +2249,9 @@ async function handleRegisterUser(e) {
               await supabaseClient.from('directives').delete().eq('target_id', `deleted_member:${restoredId}`);
               if (fullEmail) {
                 await supabaseClient.from('directives').delete().like('content', `%"email":"${fullEmail}"%`);
+              }
+              if (name) {
+                await supabaseClient.from('directives').delete().like('content', `%"name":"${name}"%`);
               }
             } catch (e) {}
 
@@ -2267,12 +2332,16 @@ async function handleRegisterUser(e) {
       deletedMembers = deletedMembers.filter(d => 
         d.id !== newId && 
         (!d.email || d.email.toLowerCase() !== fullEmail.toLowerCase()) &&
-        (!d.username || d.username.toLowerCase() !== username.toLowerCase())
+        (!d.username || d.username.toLowerCase() !== username.toLowerCase()) &&
+        (!d.name || d.name.trim() !== name)
       );
       saveDeletedMembersLocalState();
       try {
         supabaseClient.from('directives').delete().eq('id', `deleted-member-${newId}`).then(() => {});
         supabaseClient.from('directives').delete().eq('target_id', `deleted_member:${newId}`).then(() => {});
+        if (name) {
+          supabaseClient.from('directives').delete().like('content', `%"name":"${name}"%`).then(() => {});
+        }
       } catch (e) {}
 
       // Add to public.members in Supabase with schema resilience
